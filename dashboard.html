@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Money Tree - Dashboard</title>
+    <link rel="stylesheet" href="style.css" />
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+</head>
+<body>
+
+<div class="container">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+        <h1 style="color:#1b5e20;font-size:24px;">🌳 Money Tree</h1>
+        <span class="badge" id="statusBadge">✅ Verified</span>
+    </div>
+
+    <div class="user-card">
+        <div class="name" id="userName">Loading...</div>
+        <div class="phone" id="userEmail">Loading...</div>
+    </div>
+
+    <div class="balance-card">
+        <div class="label">💰 Available Loan Limit</div>
+        <div class="amount" id="loanLimit">K 0.00</div>
+        <div class="sub">Apply for your first loan today</div>
+    </div>
+
+    <div class="grid-2">
+        <button class="btn btn-primary" onclick="window.location.href='apply.html'">📝 Apply Loan</button>
+        <button class="btn btn-secondary" onclick="window.location.href='repay.html'">💰 Repay</button>
+    </div>
+
+    <div style="margin-top:20px;">
+        <h3 style="font-size:14px;color:#666;margin-bottom:12px;">📋 My Loans</h3>
+        <div id="loanHistory">
+            <p style="text-align:center;color:#999;padding:20px;">Loading...</p>
+        </div>
+    </div>
+
+    <div class="nav-bar">
+        <a href="dashboard.html" class="active"><span>🏠</span> Home</a>
+        <a href="apply.html"><span>📝</span> Apply</a>
+        <a href="repay.html"><span>💰</span> Repay</a>
+        <a href="profile.html"><span>👤</span> Profile</a>
+        <a href="admin.html"><span>🔐</span> Admin</a>
+    </div>
+</div>
+
+<script src="config.js"></script>
+<script>
+auth.onAuthStateChanged(async function(user) {
+    if (!user) {
+        window.location.href = 'index.html';
+        return;
+    }
+
+    const userDoc = await db.collection('users').doc(user.uid).get();
+    if (userDoc.exists) {
+        const data = userDoc.data();
+        document.getElementById('userName').textContent = data.fullName || user.displayName || 'User';
+        document.getElementById('userEmail').textContent = data.email || user.email || 'No email';
+        document.getElementById('loanLimit').textContent = `K ${(data.loanLimit || 0).toFixed(2)}`;
+    }
+
+    const loansSnapshot = await db.collection('loans')
+        .where('userId', '==', user.uid)
+        .orderBy('createdAt', 'desc')
+        .limit(5)
+        .get();
+
+    const loanHistory = document.getElementById('loanHistory');
+    if (loansSnapshot.empty) {
+        loanHistory.innerHTML = `<p style="text-align:center;color:#999;padding:20px;">No loans yet. Apply now!</p>`;
+        return;
+    }
+
+    let html = '';
+    loansSnapshot.forEach(doc => {
+        const loan = doc.data();
+        const date = loan.createdAt ? new Date(loan.createdAt).toLocaleDateString() : 'N/A';
+        const statusClass = `status-${loan.status || 'pending'}`;
+        html += `
+            <div class="loan-item">
+                <div>
+                    <div style="font-weight:600;">K ${(loan.amount || 0).toFixed(2)}</div>
+                    <div style="font-size:12px;color:#666;">${loan.purpose || 'N/A'} • ${date}</div>
+                </div>
+                <span class="status ${statusClass}">${loan.status || 'pending'}</span>
+            </div>
+        `;
+    });
+    loanHistory.innerHTML = html;
+});
+
+function logout() {
+    auth.signOut().then(() => window.location.href = 'index.html');
+}
+window.logout = logout;
+</script>
+
+</body>
+</html>

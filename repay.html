@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Money Tree - Repay</title>
+    <link rel="stylesheet" href="style.css" />
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+</head>
+<body>
+
+<div class="container">
+    <div class="header">
+        <h1>💰 Repay Loan</h1>
+        <span class="badge">Payment</span>
+    </div>
+    
+    <div id="message"></div>
+    
+    <div id="activeLoans">
+        <p style="text-align:center;color:#999;padding:20px;">Loading...</p>
+    </div>
+    
+    <div style="background:#f5f5f5;padding:16px;border-radius:12px;margin-top:16px;">
+        <h3 style="font-size:14px;color:#333;margin-bottom:8px;">📱 How to Repay</h3>
+        <ol style="font-size:13px;color:#555;padding-left:20px;line-height:1.8;">
+            <li>Dial <strong>*115#</strong> (Airtel) or <strong>*303#</strong> (MTN)</li>
+            <li>Select <strong>Goods &amp; Services</strong></li>
+            <li>Select <strong>Make Payment</strong></li>
+            <li>Merchant Code: <strong>MONEYTREE</strong></li>
+            <li>Reference: Your <strong>NRC</strong> (no slashes)</li>
+            <li>Enter amount and confirm</li>
+        </ol>
+    </div>
+    
+    <div class="nav-bar">
+        <a href="dashboard.html"><span>🏠</span> Home</a>
+        <a href="apply.html"><span>📝</span> Apply</a>
+        <a href="repay.html" class="active"><span>💰</span> Repay</a>
+        <a href="profile.html"><span>👤</span> Profile</a>
+        <a href="admin.html"><span>🔐</span> Admin</a>
+    </div>
+</div>
+
+<script src="config.js"></script>
+<script>
+auth.onAuthStateChanged(async function(user) {
+    if (!user) {
+        window.location.href = 'index.html';
+        return;
+    }
+
+    const loansSnapshot = await db.collection('loans')
+        .where('userId', '==', user.uid)
+        .where('status', 'in', ['approved', 'disbursed', 'active'])
+        .get();
+
+    const container = document.getElementById('activeLoans');
+    if (loansSnapshot.empty) {
+        container.innerHTML = `<p style="text-align:center;color:#999;padding:20px;">No active loans to repay</p>`;
+        return;
+    }
+
+    let html = '';
+    loansSnapshot.forEach(doc => {
+        const loan = doc.data();
+        const dueDate = loan.dueDate ? new Date(loan.dueDate).toLocaleDateString() : 'N/A';
+        html += `
+            <div class="loan-item">
+                <div>
+                    <div style="font-weight:600;">K ${(loan.totalRepay || 0).toFixed(2)}</div>
+                    <div style="font-size:12px;color:#666;">Due: ${dueDate}</div>
+                    <div style="font-size:12px;color:#666;">${loan.purpose || 'N/A'}</div>
+                </div>
+                <span class="status status-disbursed">${loan.status || 'active'}</span>
+            </div>
+        `;
+    });
+    container.innerHTML = html;
+});
+</script>
+
+</body>
+</html>

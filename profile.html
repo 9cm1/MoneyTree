@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Money Tree - Profile</title>
+    <link rel="stylesheet" href="style.css" />
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+</head>
+<body>
+
+<div class="container">
+    <div class="header">
+        <h1>👤 My Profile</h1>
+        <span class="badge" id="kycStatus">Pending</span>
+    </div>
+    
+    <div id="message"></div>
+    
+    <div style="text-align:center;margin-bottom:20px;">
+        <img id="profilePhoto" src="" alt="Profile" style="width:80px;height:80px;border-radius:50%;object-fit:cover;border:3px solid #2e7d32;" />
+        <h3 id="displayName" style="margin-top:8px;">Loading...</h3>
+        <p id="displayEmail" style="color:#666;font-size:14px;">Loading...</p>
+    </div>
+    
+    <label>📱 Phone Number</label>
+    <input type="tel" id="phoneNumber" placeholder="0977123456" />
+    
+    <label>🪪 NRC Number</label>
+    <input type="text" id="nrcNumber" placeholder="e.g., 123456/78/1" />
+    
+    <button class="btn btn-primary" id="updateProfile">💾 Update Profile</button>
+    
+    <button class="btn btn-danger" onclick="logout()" style="margin-top:12px;">🚪 Logout</button>
+    
+    <div class="nav-bar">
+        <a href="dashboard.html"><span>🏠</span> Home</a>
+        <a href="apply.html"><span>📝</span> Apply</a>
+        <a href="repay.html"><span>💰</span> Repay</a>
+        <a href="profile.html" class="active"><span>👤</span> Profile</a>
+        <a href="admin.html"><span>🔐</span> Admin</a>
+    </div>
+</div>
+
+<script src="config.js"></script>
+<script>
+auth.onAuthStateChanged(async function(user) {
+    if (!user) {
+        window.location.href = 'index.html';
+        return;
+    }
+
+    const userDoc = await db.collection('users').doc(user.uid).get();
+    if (userDoc.exists) {
+        const data = userDoc.data();
+        document.getElementById('displayName').textContent = data.fullName || user.displayName || 'User';
+        document.getElementById('displayEmail').textContent = data.email || user.email || 'No email';
+        document.getElementById('phoneNumber').value = data.phoneNumber || '';
+        document.getElementById('nrcNumber').value = data.nrcNumber || '';
+        document.getElementById('profilePhoto').src = data.photoURL || 'https://ui-avatars.com/api/?name=User&background=2e7d32&color=fff';
+        document.getElementById('kycStatus').textContent = data.kycStatus || 'pending';
+    }
+});
+
+document.getElementById('updateProfile').addEventListener('click', async function() {
+    const user = auth.currentUser;
+    if (!user) return;
+
+    const phoneNumber = document.getElementById('phoneNumber').value.trim();
+    const nrcNumber = document.getElementById('nrcNumber').value.trim();
+
+    try {
+        await db.collection('users').doc(user.uid).update({
+            phoneNumber: phoneNumber,
+            nrcNumber: nrcNumber,
+            updatedAt: new Date().toISOString()
+        });
+        document.getElementById('message').innerHTML = '✅ Profile updated successfully!';
+        document.getElementById('message').style.color = '#2e7d32';
+    } catch (error) {
+        alert('Error updating profile: ' + error.message);
+    }
+});
+
+function logout() {
+    auth.signOut().then(() => window.location.href = 'index.html');
+}
+</script>
+
+</body>
+</html>

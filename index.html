@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Money Tree - Login</title>
+    <link rel="stylesheet" href="style.css" />
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+</head>
+<body>
+
+<div class="container">
+    <h1 style="color:#1b5e20;font-size:28px;text-align:center;">🌳 Money Tree</h1>
+    <p style="text-align:center;color:#666;margin-bottom:28px;">Get a loan in minutes. No paperwork.</p>
+    
+    <div id="message"></div>
+    
+    <button class="google-btn" id="googleSignIn">
+        <img src="https://www.google.com/favicon.ico" alt="Google" />
+        Sign in with Google
+    </button>
+    
+    <p style="text-align:center;font-size:12px;color:#999;margin-top:20px;">
+        By continuing, you agree to our Terms & Privacy Policy
+    </p>
+</div>
+
+<script src="config.js"></script>
+<script>
+const messageDiv = document.getElementById('message');
+const googleBtn = document.getElementById('googleSignIn');
+
+function showMessage(msg, isError = false) {
+    messageDiv.textContent = msg;
+    messageDiv.style.color = isError ? '#d32f2f' : '#2e7d32';
+}
+
+googleBtn.addEventListener('click', async function() {
+    try {
+        const provider = new firebase.auth.GoogleAuthProvider();
+        const result = await auth.signInWithPopup(provider);
+        const user = result.user;
+        
+        showMessage(`✅ Welcome ${user.displayName || 'User'}!`);
+
+        const userDoc = await db.collection('users').doc(user.uid).get();
+        if (!userDoc.exists) {
+            await db.collection('users').doc(user.uid).set({
+                fullName: user.displayName || '',
+                email: user.email || '',
+                phoneNumber: user.phoneNumber || '',
+                photoURL: user.photoURL || '',
+                role: 'user',
+                kycStatus: 'pending',
+                createdAt: new Date().toISOString()
+            });
+        }
+        window.location.href = 'dashboard.html';
+    } catch (error) {
+        showMessage(`❌ ${error.message}`, true);
+    }
+});
+
+auth.onAuthStateChanged(function(user) {
+    if (user) window.location.href = 'dashboard.html';
+});
+</script>
+
+</body>
+</html>

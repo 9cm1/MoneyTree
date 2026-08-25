@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Money Tree - Admin</title>
+    <link rel="stylesheet" href="style.css" />
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+    <style>
+        .admin-stats {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+        .admin-stats .stat {
+            background: #f5f5f5;
+            padding: 16px;
+            border-radius: 12px;
+            text-align: center;
+        }
+        .admin-stats .stat .num { font-size: 28px; font-weight: bold; color: #1b5e20; }
+        .admin-stats .stat .label { font-size: 12px; color: #666; }
+        .app-card {
+            background: #fafafa;
+            padding: 16px;
+            border-radius: 12px;
+            margin: 12px 0;
+            border-left: 4px solid #ff9800;
+        }
+        .app-card .actions { margin-top: 12px; display: flex; gap: 8px; flex-wrap: wrap; }
+        .app-card .actions button { padding: 8px 20px; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; }
+        .btn-approve { background: #4caf50; color: white; }
+        .btn-approve:hover { background: #388e3c; }
+        .btn-reject { background: #f44336; color: white; }
+        .btn-reject:hover { background: #c62828; }
+        .btn-disburse { background: #2196f3; color: white; }
+        .btn-disburse:hover { background: #0d47a1; }
+        .tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+        .tabs button { padding: 8px 20px; border: none; border-radius: 20px; background: #e0e0e0; cursor: pointer; font-weight: 600; }
+        .tabs button.active { background: #1b5e20; color: white; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        .reject-reason { background: #fce4ec; padding: 8px 12px; border-radius: 8px; font-size: 13px; color: #c62828; margin-top: 8px; }
+        .search-box {
+            width: 100%; padding: 10px 16px; border: 2px solid #e0e0e0; border-radius: 8px;
+            font-size: 14px; margin-bottom: 16px;
+        }
+        .search-box:focus { border-color: #1b5e20; outline: none; }
+        @media (max-width: 600px) {
+            .admin-stats { grid-template-columns: repeat(2, 1fr); }
+        }
+        .admin-only { background: #fff3e0; padding: 8px 16px; border-radius: 8px; margin-bottom: 16px; font-size: 13px; color: #e65100; }
+    </style>
+</head>
+<body>
+
+<div class="container" id="adminApp">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+        <h1 style="color:#1b5e20;font-size:24px;">🔐 Admin Portal</h1>
+        <button class="btn btn-danger" onclick="logout()" style="width:auto;padding:8px 20px;">🚪 Logout</button>
+    </div>
+
+    <div class="admin-only">🔒 You are viewing this as an admin. Only admins can access this page.</div>
+
+    <div class="admin-stats" id="statsContainer">
+        <div class="stat"><div class="num" id="statPending">0</div><div class="label">⏳ Pending</div></div>
+        <div class="stat"><div class="num" id="statApproved">0</div><div class="label">✅ Approved</div></div>
+        <div class="stat"><div class="num" id="statDisbursed">0</div><div class="label">💰 Disbursed</div></div>
+        <div class="stat"><div class="num" id="statTotal">0</div><div class="label">📋 Total</div></div>
+    </div>
+
+    <input class="search-box" id="searchInput" placeholder="🔍 Search by name, phone, or purpose..." />
+
+    <div class="tabs">
+        <button class="active" data-tab="pending">⏳ Pending</button>
+        <button data-tab="approved">✅ Approved</button>
+        <button data-tab="disbursed">💰 Disbursed</button>
+        <button data-tab="rejected">❌ Rejected</button>
+        <button data-tab="all">📋 All</button>
+    </div>
+
+    <div id="pending" class="tab-content active"><div id="pendingList"></div></div>
+    <div id="approved" class="tab-content"><div id="approvedList"></div></div>
+    <div id="disbursed" class="tab-content"><div id="disbursedList"></div></div>
+    <div id="rejected" class="tab-content"><div id="rejectedList"></div></div>
+    <div id="all" class="tab-content"><div id="allList"></div></div>
+
+    <div class="nav-bar">
+        <a href="dashboard.html"><span>🏠</span> Home</a>
+        <a href="apply.html"><span>📝</span> Apply</a>
+        <a href="repay.html"><span>💰</span> Repay</a>
+        <a href="profile.html"><span>👤</span> Profile</a>
+        <a href="admin.html" class="active"><span>🔐</span> Admin</a>
+    </div>
+</div>
+
+<script src="config.js"></script>
+<script>
+let currentAdmin = null;
+let allLoans = [];
+let allUsers = {};
+let filteredLoans = [];
+
+auth.onAuthStateChanged(async function(user) {
+    if (!user) { window.location.href = 'index.html'; return; }
+
+    const userDoc = await db.collection('users').doc(user.uid).get();
+    if (!userDoc.exists || userDoc.data().role !== 'admin') {
+        window.location.href = 'dashboard.html';
+        return;
+    }
+
+    currentAdmin = user;
+    loadData();
+});
+
+function loadData() {
+    db.collection('loans').orderBy('createdAt', 'desc').onSnapshot((snapshot) => {
+        allLoans = [];
+        snapshot.forEach(doc => { const data = doc.data(); data.id = doc.id; allLoans.push(data); });
+        filterAndRender();
+    });
+
+    db.collection('users').onSnapshot((snapshot) => {
+        allUsers = {};
+        snapshot.forEach(doc => { allUsers[doc.id] = doc.data(); });
+        filterAndRender();
+    });
+}
+
+function filterAndRender() {
+    const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+    filteredLoans = allLoans.filter(loan => {
+        const user = allUsers[loan.userId] || {};
+        return [user.fullName, user.email, user.nrcNumber, user.phoneNumber, loan.purpose, loan.status]
+            .join(' ').toLowerCase().includes(searchTerm);
+    });
+    updateStats();
+    renderAllTabs();
+}
+
+function updateStats() {
+    document.getElementById('statPending').textContent = allLoans.filter(l => l.status === 'pending').length;
+    document.getElementById('statApproved').textContent = allLoans.filter(l => l.status === 'approved').length;
+    document.getElementById('statDisbursed').textContent = allLoans.filter(l => l.status === 'disbursed' || l.status === 'active').length;
+    document.getElementById('statTotal').textContent = allLoans.length;
+}
+
+function renderLoanCard(loan) {
+    const user = allUsers[loan.userId] || {};
+    const date = loan.createdAt ? new Date(loan.createdAt).toLocaleDateString() : 'N/A';
+    const dueDate = loan.dueDate ? new Date(loan.dueDate).toLocaleDateString() : 'N/A';
+    const statusClass = `status-${loan.status || 'pending'}`;
+    
+    let actions = '';
+    if (loan.status === 'pending') {
+        actions = `
+            <button class="btn-approve" onclick="approveLoan('${loan.id}')">✅ Approve</button>
+            <button class="btn-reject" onclick="rejectLoan('${loan.id}')">❌ Reject</button>
+        `;
+    } else if (loan.status === 'approved') {
+        actions = `<button class="btn-disburse" onclick="disburseLoan('${loan.id}')">💰 Mark Disbursed</button>`;
+    }
+
+    let docHtml = '';
+    if (loan.documents) {
+        if (loan.documents.nrcPhoto) docHtml += `<span class="document-thumb">📄 NRC</span>`;
+        if (loan.documents.paySlip) docHtml += `<span class="document-thumb">📄 Pay Slip</span>`;
+    }
+
+    let rejectReason = '';
+    if (loan.status === 'rejected' && loan.rejectionReason) {
+        rejectReason = `<div class="reject-reason">❌ Reason: ${loan.rejectionReason}</div>`;
+    }
+
+    return `
+        <div class="app-card" style="border-left-color: ${loan.status === 'pending' ? '#ff9800' : loan.status === 'approved' ? '#4caf50' : loan.status === 'rejected' ? '#f44336' : '#2196f3'}">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;">
+                <div>
+                    <h4>${user.fullName || 'Unknown User'}</h4>
+                    <div style="font-size:13px;color:#666;">📧 ${user.email || 'No email'} &nbsp;|&nbsp; 📱 ${user.phoneNumber || 'No phone'}</div>
+                    <div style="font-size:14px;margin-top:4px;">💰 K${loan.amount || 0} &nbsp;|&nbsp; 📅 ${loan.period || 0} days &nbsp;|&nbsp; 📝 ${loan.purpose || 'N/A'}</div>
+                    <div style="font-size:12px;color:#999;">Applied: ${date} &nbsp;|&nbsp; Due: ${dueDate}</div>
+                    <div style="margin-top:4px;">${docHtml}</div>
+                    ${rejectReason}
+                </div>
+                <div><span class="status ${statusClass}">${loan.status || 'pending'}</span></div>
+            </div>
+            <div class="actions">${actions}</div>
+        </div>
+    `;
+}
+
+function renderEmpty() {
+    return `<div style="text-align:center;padding:40px;color:#999;">📭 No loans in this category</div>`;
+}
+
+function renderAllTabs() {
+    const tabs = ['pending', 'approved', 'disbursed', 'rejected', 'all'];
+    tabs.forEach(tab => {
+        let list = tab === 'all' ? filteredLoans : 
+                   tab === 'disbursed' ? filteredLoans.filter(l => l.status === 'disbursed' || l.status === 'active') :
+                   filteredLoans.filter(l => l.status === tab);
+        document.getElementById(`${tab}List`).innerHTML = list.length ? list.map(renderLoanCard).join('') : renderEmpty();
+    });
+}
+
+document.getElementById('searchInput').addEventListener('input', filterAndRender);
+
+document.querySelectorAll('.tabs button').forEach(btn => {
+    btn.addEventListener('click', function() {
+        document.querySelectorAll('.tabs button').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+        this.classList.add('active');
+        document.getElementById(this.dataset.tab).classList.add('active');
+    });
+});
+
+function approveLoan(loanId) {
+    if (!confirm('✅ Approve this loan?')) return;
+    db.collection('loans').doc(loanId).update({ status: 'approved', approvedBy: currentAdmin.uid, approvedAt: new Date().toISOString() })
+        .then(() => alert('✅ Loan approved!'));
+}
+
+function rejectLoan(loanId) {
+    const reason = prompt('❌ Enter reason for rejection:');
+    if (reason === null || !reason.trim()) return;
+    db.collection('loans').doc(loanId).update({ status: 'rejected', rejectedBy: currentAdmin.uid, rejectedAt: new Date().toISOString(), rejectionReason: reason.trim() })
+        .then(() => alert('❌ Loan rejected.'));
+}
+
+function disburseLoan(loanId) {
+    if (!confirm('💰 Confirm funds have been sent?')) return;
+    db.collection('loans').doc(loanId).update({ status: 'disbursed', disbursedBy: currentAdmin.uid, disbursedAt: new Date().toISOString() })
+        .then(() => alert('💰 Loan marked as disbursed!'));
+}
+
+function logout() {
+    auth.signOut().then(() => window.location.href = 'index.html');
+}
+</script>
+
+</body>
+</html>
