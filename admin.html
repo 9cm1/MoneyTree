@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Money Tree - Admin</title>
     <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
@@ -38,62 +39,189 @@
         .btn-reject:hover { background: #c62828; }
         .btn-disburse { background: #2196f3; color: white; }
         .btn-disburse:hover { background: #0d47a1; }
-        .tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
-        .tabs button { padding: 8px 20px; border: none; border-radius: 20px; background: #e0e0e0; cursor: pointer; font-weight: 600; }
+        .tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+            overflow-x: auto;
+        }
+        .tabs button {
+            padding: 8px 20px;
+            border: none;
+            border-radius: 20px;
+            background: #e0e0e0;
+            cursor: pointer;
+            font-weight: 600;
+            white-space: nowrap;
+            transition: all 0.2s;
+        }
+        .tabs button i { margin-right: 4px; }
         .tabs button.active { background: #1b5e20; color: white; }
         .tab-content { display: none; }
         .tab-content.active { display: block; }
-        .reject-reason { background: #fce4ec; padding: 8px 12px; border-radius: 8px; font-size: 13px; color: #c62828; margin-top: 8px; }
+        .reject-reason {
+            background: #fce4ec;
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-size: 13px;
+            color: #c62828;
+            margin-top: 8px;
+        }
         .search-box {
-            width: 100%; padding: 10px 16px; border: 2px solid #e0e0e0; border-radius: 8px;
-            font-size: 14px; margin-bottom: 16px;
+            width: 100%;
+            padding: 10px 16px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            margin-bottom: 16px;
+            box-sizing: border-box;
         }
         .search-box:focus { border-color: #1b5e20; outline: none; }
+        .admin-only {
+            background: #e8f5e9;
+            padding: 8px 16px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+            font-size: 13px;
+            color: #1b5e20;
+        }
+        .admin-only i { margin-right: 6px; }
+        .user-detail { font-size: 13px; color: #555; margin: 2px 0; }
+        .user-detail i { width: 18px; color: #2e7d32; margin-right: 4px; }
+        .doc-link {
+            display: inline-block;
+            background: #e3f2fd;
+            padding: 2px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            color: #0d47a1;
+            margin-right: 4px;
+        }
+        .status-badge {
+            padding: 4px 14px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+        .status-pending { background: #fff3e0; color: #e65100; }
+        .status-approved { background: #e8f5e9; color: #2e7d32; }
+        .status-rejected { background: #fce4ec; color: #c62828; }
+        .status-disbursed { background: #e3f2fd; color: #0d47a1; }
+        .status-repaid { background: #e8f5e9; color: #1b5e20; }
+        .empty-state {
+            text-align: center;
+            padding: 40px 20px;
+            color: #999;
+        }
+        .empty-state i {
+            font-size: 32px;
+            display: block;
+            margin-bottom: 8px;
+        }
+        .nav-bar {
+            display: flex;
+            justify-content: space-around;
+            padding: 12px 0 0 0;
+            border-top: 1px solid #e0e0e0;
+            margin-top: 24px;
+        }
+        .nav-bar a {
+            text-decoration: none;
+            color: #888;
+            font-size: 11px;
+            text-align: center;
+            flex: 1;
+            padding: 6px 0;
+            border-radius: 8px;
+            transition: all 0.2s;
+        }
+        .nav-bar a i {
+            display: block;
+            font-size: 20px;
+            margin-bottom: 2px;
+        }
+        .nav-bar a.active {
+            color: #2e7d32;
+            font-weight: 600;
+            background: #e8f5e9;
+        }
+        .nav-bar a:hover:not(.active) {
+            color: #1b5e20;
+            background: #f0f4f0;
+        }
+        .admin-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+        .admin-header h1 { color: #1b5e20; font-size: 24px; }
+        .admin-header h1 i { color: #2e7d32; margin-right: 6px; }
+        .admin-header .logout-btn {
+            background: #d32f2f;
+            color: white;
+            border: none;
+            padding: 8px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+        .admin-header .logout-btn:hover { background: #b71c1c; }
+        .admin-header .logout-btn i { margin-right: 4px; }
         @media (max-width: 600px) {
             .admin-stats { grid-template-columns: repeat(2, 1fr); }
         }
-        .admin-only { background: #fff3e0; padding: 8px 16px; border-radius: 8px; margin-bottom: 16px; font-size: 13px; color: #e65100; }
     </style>
 </head>
 <body>
 
 <div class="container" id="adminApp">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-        <h1 style="color:#1b5e20;font-size:24px;">🔐 Admin Portal</h1>
-        <button class="btn btn-danger" onclick="logout()" style="width:auto;padding:8px 20px;">🚪 Logout</button>
+    <!-- Header -->
+    <div class="admin-header">
+        <h1><i class="fas fa-lock"></i> Admin Portal</h1>
+        <button class="logout-btn" onclick="logout()"><i class="fas fa-sign-out-alt"></i> Logout</button>
     </div>
 
-    <div class="admin-only">🔒 You are viewing this as an admin. Only admins can access this page.</div>
+    <div class="admin-only">
+        <i class="fas fa-shield-alt"></i> You are viewing this as an admin.
+    </div>
 
+    <!-- Stats -->
     <div class="admin-stats" id="statsContainer">
-        <div class="stat"><div class="num" id="statPending">0</div><div class="label">⏳ Pending</div></div>
-        <div class="stat"><div class="num" id="statApproved">0</div><div class="label">✅ Approved</div></div>
-        <div class="stat"><div class="num" id="statDisbursed">0</div><div class="label">💰 Disbursed</div></div>
-        <div class="stat"><div class="num" id="statTotal">0</div><div class="label">📋 Total</div></div>
+        <div class="stat"><div class="num" id="statPending">0</div><div class="label"><i class="fas fa-clock"></i> Pending</div></div>
+        <div class="stat"><div class="num" id="statApproved">0</div><div class="label"><i class="fas fa-check-circle"></i> Approved</div></div>
+        <div class="stat"><div class="num" id="statDisbursed">0</div><div class="label"><i class="fas fa-hand-holding-usd"></i> Disbursed</div></div>
+        <div class="stat"><div class="num" id="statTotal">0</div><div class="label"><i class="fas fa-file-alt"></i> Total</div></div>
     </div>
 
-    <input class="search-box" id="searchInput" placeholder="🔍 Search by name, phone, or purpose..." />
+    <!-- Search -->
+    <input class="search-box" id="searchInput" placeholder="🔍 Search by name, phone, NRC, or email..." />
 
+    <!-- Tabs -->
     <div class="tabs">
-        <button class="active" data-tab="pending">⏳ Pending</button>
-        <button data-tab="approved">✅ Approved</button>
-        <button data-tab="disbursed">💰 Disbursed</button>
-        <button data-tab="rejected">❌ Rejected</button>
-        <button data-tab="all">📋 All</button>
+        <button class="active" data-tab="pending"><i class="fas fa-clock"></i> Pending</button>
+        <button data-tab="approved"><i class="fas fa-check-circle"></i> Approved</button>
+        <button data-tab="disbursed"><i class="fas fa-hand-holding-usd"></i> Disbursed</button>
+        <button data-tab="rejected"><i class="fas fa-times-circle"></i> Rejected</button>
+        <button data-tab="all"><i class="fas fa-list"></i> All</button>
     </div>
 
+    <!-- Content -->
     <div id="pending" class="tab-content active"><div id="pendingList"></div></div>
     <div id="approved" class="tab-content"><div id="approvedList"></div></div>
     <div id="disbursed" class="tab-content"><div id="disbursedList"></div></div>
     <div id="rejected" class="tab-content"><div id="rejectedList"></div></div>
     <div id="all" class="tab-content"><div id="allList"></div></div>
 
+    <!-- Bottom Navigation -->
     <div class="nav-bar">
-        <a href="dashboard.html"><span>🏠</span> Home</a>
-        <a href="apply.html"><span>📝</span> Apply</a>
-        <a href="repay.html"><span>💰</span> Repay</a>
-        <a href="profile.html"><span>👤</span> Profile</a>
-        <a href="admin.html" class="active"><span>🔐</span> Admin</a>
+        <a href="dashboard.html"><i class="fas fa-home"></i> Home</a>
+        <a href="apply.html"><i class="fas fa-paper-plane"></i> Apply</a>
+        <a href="repay.html"><i class="fas fa-hand-holding-usd"></i> Repay</a>
+        <a href="profile.html"><i class="fas fa-user"></i> Profile</a>
+        <a href="admin.html" class="active"><i class="fas fa-lock"></i> Admin</a>
     </div>
 </div>
 
@@ -158,36 +286,51 @@ function renderLoanCard(loan) {
     let actions = '';
     if (loan.status === 'pending') {
         actions = `
-            <button class="btn-approve" onclick="approveLoan('${loan.id}')">✅ Approve</button>
-            <button class="btn-reject" onclick="rejectLoan('${loan.id}')">❌ Reject</button>
+            <button class="btn-approve" onclick="approveLoan('${loan.id}')"><i class="fas fa-check"></i> Approve</button>
+            <button class="btn-reject" onclick="rejectLoan('${loan.id}')"><i class="fas fa-times"></i> Reject</button>
         `;
     } else if (loan.status === 'approved') {
-        actions = `<button class="btn-disburse" onclick="disburseLoan('${loan.id}')">💰 Mark Disbursed</button>`;
+        actions = `<button class="btn-disburse" onclick="disburseLoan('${loan.id}')"><i class="fas fa-hand-holding-usd"></i> Mark Disbursed</button>`;
     }
 
     let docHtml = '';
     if (loan.documents) {
-        if (loan.documents.nrcPhoto) docHtml += `<span class="document-thumb">📄 NRC</span>`;
-        if (loan.documents.paySlip) docHtml += `<span class="document-thumb">📄 Pay Slip</span>`;
+        if (loan.documents.nrcFront) docHtml += `<span class="doc-link"><i class="fas fa-id-card"></i> NRC</span>`;
+        if (loan.documents.paySlip) docHtml += `<span class="doc-link"><i class="fas fa-file-pdf"></i> Payslip</span>`;
     }
 
     let rejectReason = '';
     if (loan.status === 'rejected' && loan.rejectionReason) {
-        rejectReason = `<div class="reject-reason">❌ Reason: ${loan.rejectionReason}</div>`;
+        rejectReason = `<div class="reject-reason"><i class="fas fa-info-circle"></i> ${loan.rejectionReason}</div>`;
     }
+
+    const interestRate = loan.interest ? (loan.interest / loan.amount * 100).toFixed(1) : '0';
+    const totalRepay = loan.totalRepay || loan.amount || 0;
 
     return `
         <div class="app-card" style="border-left-color: ${loan.status === 'pending' ? '#ff9800' : loan.status === 'approved' ? '#4caf50' : loan.status === 'rejected' ? '#f44336' : '#2196f3'}">
             <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;">
                 <div>
-                    <h4>${user.fullName || 'Unknown User'}</h4>
-                    <div style="font-size:13px;color:#666;">📧 ${user.email || 'No email'} &nbsp;|&nbsp; 📱 ${user.phoneNumber || 'No phone'}</div>
-                    <div style="font-size:14px;margin-top:4px;">💰 K${loan.amount || 0} &nbsp;|&nbsp; 📅 ${loan.period || 0} days &nbsp;|&nbsp; 📝 ${loan.purpose || 'N/A'}</div>
-                    <div style="font-size:12px;color:#999;">Applied: ${date} &nbsp;|&nbsp; Due: ${dueDate}</div>
-                    <div style="margin-top:4px;">${docHtml}</div>
+                    <h4 style="color:#1b5e20;margin-bottom:4px;">${user.fullName || 'Unknown User'}</h4>
+                    <div class="user-detail"><i class="fas fa-envelope"></i> ${user.email || 'No email'}</div>
+                    <div class="user-detail"><i class="fas fa-phone"></i> ${user.phoneNumber || 'No phone'}</div>
+                    <div class="user-detail"><i class="fas fa-id-card"></i> NRC: ${user.nrcNumber || 'Not provided'}</div>
+                    <div style="font-size:14px;margin-top:6px;font-weight:600;color:#1b5e20;">
+                        K${(loan.amount || 0).toFixed(2)}
+                        <span style="font-weight:400;color:#555;font-size:13px;">
+                            • ${loan.period || 0} days • ${interestRate}% interest
+                        </span>
+                    </div>
+                    <div style="font-size:13px;color:#555;">
+                        <i class="fas fa-hand-holding-usd"></i> Total repay: K${(totalRepay || 0).toFixed(2)}
+                    </div>
+                    <div style="font-size:12px;color:#999;margin-top:2px;">
+                        <i class="fas fa-calendar-alt"></i> Applied: ${date} • Due: ${dueDate}
+                    </div>
+                    <div style="margin-top:6px;">${docHtml}</div>
                     ${rejectReason}
                 </div>
-                <div><span class="status ${statusClass}">${loan.status || 'pending'}</span></div>
+                <div><span class="status-badge ${statusClass}">${loan.status || 'pending'}</span></div>
             </div>
             <div class="actions">${actions}</div>
         </div>
@@ -195,7 +338,7 @@ function renderLoanCard(loan) {
 }
 
 function renderEmpty() {
-    return `<div style="text-align:center;padding:40px;color:#999;">📭 No loans in this category</div>`;
+    return `<div class="empty-state"><i class="fas fa-inbox"></i>No loans in this category</div>`;
 }
 
 function renderAllTabs() {
@@ -221,21 +364,31 @@ document.querySelectorAll('.tabs button').forEach(btn => {
 
 function approveLoan(loanId) {
     if (!confirm('✅ Approve this loan?')) return;
-    db.collection('loans').doc(loanId).update({ status: 'approved', approvedBy: currentAdmin.uid, approvedAt: new Date().toISOString() })
-        .then(() => alert('✅ Loan approved!'));
+    db.collection('loans').doc(loanId).update({ 
+        status: 'approved', 
+        approvedBy: currentAdmin.uid, 
+        approvedAt: new Date().toISOString() 
+    }).then(() => alert('✅ Loan approved!'));
 }
 
 function rejectLoan(loanId) {
     const reason = prompt('❌ Enter reason for rejection:');
     if (reason === null || !reason.trim()) return;
-    db.collection('loans').doc(loanId).update({ status: 'rejected', rejectedBy: currentAdmin.uid, rejectedAt: new Date().toISOString(), rejectionReason: reason.trim() })
-        .then(() => alert('❌ Loan rejected.'));
+    db.collection('loans').doc(loanId).update({ 
+        status: 'rejected', 
+        rejectedBy: currentAdmin.uid, 
+        rejectedAt: new Date().toISOString(), 
+        rejectionReason: reason.trim() 
+    }).then(() => alert('❌ Loan rejected.'));
 }
 
 function disburseLoan(loanId) {
     if (!confirm('💰 Confirm funds have been sent?')) return;
-    db.collection('loans').doc(loanId).update({ status: 'disbursed', disbursedBy: currentAdmin.uid, disbursedAt: new Date().toISOString() })
-        .then(() => alert('💰 Loan marked as disbursed!'));
+    db.collection('loans').doc(loanId).update({ 
+        status: 'disbursed', 
+        disbursedBy: currentAdmin.uid, 
+        disbursedAt: new Date().toISOString() 
+    }).then(() => alert('💰 Loan marked as disbursed!'));
 }
 
 function logout() {
