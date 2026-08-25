@@ -5,100 +5,302 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Money Tree - Dashboard</title>
     <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+    <style>
+        .loan-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px;
+            background: #f8faf8;
+            border-radius: 12px;
+            margin-bottom: 12px;
+            border-left: 4px solid #ff9800;
+            transition: all 0.3s;
+        }
+        .loan-item .info .amount {
+            font-weight: 700;
+            font-size: 16px;
+            color: #1b5e20;
+        }
+        .loan-item .info .details {
+            font-size: 13px;
+            color: #666;
+            margin-top: 2px;
+        }
+        .loan-item .info .details i {
+            width: 16px;
+            color: #2e7d32;
+        }
+        .status-badge {
+            padding: 4px 14px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+        .status-pending { background: #fff3e0; color: #e65100; }
+        .status-approved { background: #e8f5e9; color: #2e7d32; }
+        .status-rejected { background: #fce4ec; color: #c62828; }
+        .status-disbursed { background: #e3f2fd; color: #0d47a1; }
+        .status-repaid { background: #e8f5e9; color: #1b5e20; }
+        .empty-state {
+            text-align: center;
+            padding: 40px 20px;
+            color: #999;
+        }
+        .empty-state i {
+            font-size: 48px;
+            color: #c8e6c9;
+            display: block;
+            margin-bottom: 12px;
+        }
+        .user-card {
+            background: #e8f5e9;
+            padding: 16px;
+            border-radius: 16px;
+            margin-bottom: 20px;
+        }
+        .user-card .name { font-weight: 700; font-size: 18px; color: #1b5e20; }
+        .user-card .email { font-size: 14px; color: #555; }
+        .user-card .phone { font-size: 13px; color: #666; margin-top: 2px; }
+        .nav-bar {
+            display: flex;
+            justify-content: space-around;
+            padding: 12px 0 0 0;
+            border-top: 1px solid #e0e0e0;
+            margin-top: 24px;
+        }
+        .nav-bar a {
+            text-decoration: none;
+            color: #888;
+            font-size: 11px;
+            text-align: center;
+            flex: 1;
+            padding: 6px 0;
+            border-radius: 8px;
+            transition: all 0.2s;
+        }
+        .nav-bar a i {
+            display: block;
+            font-size: 20px;
+            margin-bottom: 2px;
+        }
+        .nav-bar a.active {
+            color: #2e7d32;
+            font-weight: 600;
+            background: #e8f5e9;
+        }
+        .nav-bar a:hover:not(.active) {
+            color: #1b5e20;
+            background: #f0f4f0;
+        }
+        .welcome-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .welcome-header h1 {
+            color: #1b5e20;
+            font-size: 24px;
+        }
+        .welcome-header h1 i {
+            color: #2e7d32;
+            margin-right: 6px;
+        }
+        .verified-badge {
+            background: #e8f5e9;
+            color: #2e7d32;
+            padding: 6px 16px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .verified-badge i {
+            margin-right: 4px;
+        }
+        .loan-count {
+            font-size: 13px;
+            color: #666;
+            margin-bottom: 12px;
+        }
+        .loan-count i {
+            color: #2e7d32;
+            margin-right: 4px;
+        }
+        .slide-in {
+            animation: slideIn 0.4s ease-out;
+        }
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
 </head>
 <body>
 
 <div class="container">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
-        <h1 style="color:#1b5e20;font-size:24px;">🌳 Money Tree</h1>
-        <span class="badge" id="statusBadge">✅ Verified</span>
+    <!-- Header -->
+    <div class="welcome-header">
+        <h1><i class="fas fa-tree"></i> Money Tree</h1>
+        <span class="verified-badge"><i class="fas fa-check-circle"></i> Verified</span>
     </div>
 
+    <!-- User Info -->
     <div class="user-card">
         <div class="name" id="userName">Loading...</div>
-        <div class="phone" id="userEmail">Loading...</div>
+        <div class="email" id="userEmail">Loading...</div>
+        <div class="phone" id="userPhone">📱 Loading...</div>
     </div>
 
-    <div class="balance-card">
-        <div class="label">💰 Available Loan Limit</div>
-        <div class="amount" id="loanLimit">K 0.00</div>
-        <div class="sub">Apply for your first loan today</div>
-    </div>
-
-    <div class="grid-2">
-        <button class="btn btn-primary" onclick="window.location.href='apply.html'">📝 Apply Loan</button>
-        <button class="btn btn-secondary" onclick="window.location.href='repay.html'">💰 Repay</button>
-    </div>
-
-    <div style="margin-top:20px;">
-        <h3 style="font-size:14px;color:#666;margin-bottom:12px;">📋 My Loans</h3>
-        <div id="loanHistory">
-            <p style="text-align:center;color:#999;padding:20px;">Loading...</p>
+    <!-- My Loans Section -->
+    <div style="margin-top: 8px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+            <h3 style="font-size: 16px; color: #1b5e20; margin:0;">
+                <i class="fas fa-file-alt" style="color: #2e7d32;"></i> My Loans
+            </h3>
+            <span id="loanCount" class="loan-count"><i class="fas fa-file"></i> 0 loans</span>
+        </div>
+        <div id="loanList">
+            <div style="text-align:center;padding:20px;color:#999;">
+                <i class="fas fa-spinner fa-spin" style="font-size:24px;display:block;margin-bottom:8px;"></i>
+                Loading...
+            </div>
         </div>
     </div>
 
+    <!-- Bottom Navigation -->
     <div class="nav-bar">
-        <a href="dashboard.html" class="active"><span>🏠</span> Home</a>
-        <a href="apply.html"><span>📝</span> Apply</a>
-        <a href="repay.html"><span>💰</span> Repay</a>
-        <a href="profile.html"><span>👤</span> Profile</a>
-        <a href="admin.html"><span>🔐</span> Admin</a>
+        <a href="dashboard.html" class="active"><i class="fas fa-home"></i> Home</a>
+        <a href="apply.html"><i class="fas fa-paper-plane"></i> Apply</a>
+        <a href="repay.html"><i class="fas fa-hand-holding-usd"></i> Repay</a>
+        <a href="profile.html"><i class="fas fa-user"></i> Profile</a>
+        <a href="admin.html"><i class="fas fa-lock"></i> Admin</a>
     </div>
 </div>
 
 <script src="config.js"></script>
 <script>
+// ============================================================
+// REAL-TIME LOAN LISTENER (NO INDEX REQUIRED)
+// ============================================================
+let currentUser = null;
+let unsubscribeLoans = null;
+
 auth.onAuthStateChanged(async function(user) {
     if (!user) {
         window.location.href = 'index.html';
         return;
     }
+    currentUser = user;
 
-    const userDoc = await db.collection('users').doc(user.uid).get();
-    if (userDoc.exists) {
-        const data = userDoc.data();
-        document.getElementById('userName').textContent = data.fullName || user.displayName || 'User';
-        document.getElementById('userEmail').textContent = data.email || user.email || 'No email';
-        document.getElementById('loanLimit').textContent = `K ${(data.loanLimit || 0).toFixed(2)}`;
+    // Load user profile
+    try {
+        const userDoc = await db.collection('users').doc(user.uid).get();
+        if (userDoc.exists) {
+            const data = userDoc.data();
+            document.getElementById('userName').textContent = data.fullName || user.displayName || 'User';
+            document.getElementById('userEmail').textContent = data.email || user.email || 'No email';
+            document.getElementById('userPhone').textContent = data.phoneNumber ? `📱 ${data.phoneNumber}` : '📱 No phone';
+        }
+    } catch (error) {
+        console.error('Error loading profile:', error);
     }
 
-    const loansSnapshot = await db.collection('loans')
-        .where('userId', '==', user.uid)
-        .orderBy('createdAt', 'desc')
-        .limit(5)
-        .get();
+    // --- SET UP REAL-TIME LISTENER (NO orderBy) ---
+    if (unsubscribeLoans) {
+        unsubscribeLoans();
+    }
 
-    const loanHistory = document.getElementById('loanHistory');
-    if (loansSnapshot.empty) {
-        loanHistory.innerHTML = `<p style="text-align:center;color:#999;padding:20px;">No loans yet. Apply now!</p>`;
+    unsubscribeLoans = db.collection('loans')
+        .where('userId', '==', user.uid)
+        .onSnapshot((snapshot) => {
+            renderLoans(snapshot);
+        }, (error) => {
+            console.error('Error listening to loans:', error);
+            document.getElementById('loanList').innerHTML = `
+                <div style="text-align:center;padding:20px;color:#d32f2f;">
+                    <i class="fas fa-exclamation-circle"></i> Error loading loans: ${error.message}
+                </div>
+            `;
+        });
+});
+
+// ============================================================
+// RENDER LOANS
+// ============================================================
+function renderLoans(snapshot) {
+    const loanList = document.getElementById('loanList');
+
+    if (snapshot.empty) {
+        loanList.innerHTML = `
+            <div class="empty-state slide-in">
+                <i class="fas fa-inbox"></i>
+                <p>You haven't applied for any loans yet.</p>
+                <a href="apply.html" style="color: #2e7d32; font-weight: 600; text-decoration: none; display: inline-block; margin-top: 8px;">
+                    <i class="fas fa-paper-plane"></i> Apply Now
+                </a>
+            </div>
+        `;
+        document.getElementById('loanCount').innerHTML = '<i class="fas fa-file"></i> 0 loans';
         return;
     }
 
+    // Convert to array and sort manually (no index needed)
+    const loans = [];
+    snapshot.forEach(doc => {
+        const data = doc.data();
+        data.id = doc.id;
+        loans.push(data);
+    });
+
+    // Sort by createdAt manually (newest first)
+    loans.sort((a, b) => {
+        const dateA = a.createdAt ? new Date(a.createdAt) : new Date(0);
+        const dateB = b.createdAt ? new Date(b.createdAt) : new Date(0);
+        return dateB - dateA;
+    });
+
+    // Update loan count
+    const totalLoans = loans.length;
+    document.getElementById('loanCount').innerHTML = `<i class="fas fa-file"></i> ${totalLoans} loan${totalLoans > 1 ? 's' : ''}`;
+
     let html = '';
-    loansSnapshot.forEach(doc => {
-        const loan = doc.data();
+    loans.forEach(loan => {
         const date = loan.createdAt ? new Date(loan.createdAt).toLocaleDateString() : 'N/A';
         const statusClass = `status-${loan.status || 'pending'}`;
+        const statusLabel = loan.status === 'pending' ? 'Under Review' : 
+                           loan.status === 'approved' ? 'Approved' :
+                           loan.status === 'rejected' ? 'Rejected' :
+                           loan.status === 'disbursed' ? 'Disbursed' :
+                           loan.status === 'active' ? 'Active' :
+                           loan.status || 'Pending';
+        
+        const borderColor = loan.status === 'pending' ? '#ff9800' : 
+                           loan.status === 'approved' ? '#4caf50' : 
+                           loan.status === 'rejected' ? '#f44336' : 
+                           '#2196f3';
+        
         html += `
-            <div class="loan-item">
-                <div>
-                    <div style="font-weight:600;">K ${(loan.amount || 0).toFixed(2)}</div>
-                    <div style="font-size:12px;color:#666;">${loan.purpose || 'N/A'} • ${date}</div>
+            <div class="loan-item slide-in" style="border-left-color: ${borderColor}">
+                <div class="info">
+                    <div class="amount">K ${(loan.amount || 0).toFixed(2)}</div>
+                    <div class="details">
+                        <i class="fas fa-calendar-alt"></i> ${date}
+                        ${loan.purpose ? `• <i class="fas fa-tag"></i> ${loan.purpose}` : ''}
+                        ${loan.interest ? `• <i class="fas fa-percent"></i> ${loan.interest}% interest` : ''}
+                    </div>
                 </div>
-                <span class="status ${statusClass}">${loan.status || 'pending'}</span>
+                <span class="status-badge ${statusClass}">${statusLabel}</span>
             </div>
         `;
     });
-    loanHistory.innerHTML = html;
-});
-
-function logout() {
-    auth.signOut().then(() => window.location.href = 'index.html');
+    loanList.innerHTML = html;
 }
-window.logout = logout;
 </script>
 
 </body>
