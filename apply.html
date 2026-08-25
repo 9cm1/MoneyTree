@@ -5,11 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Money Tree - Apply Loan</title>
     <link rel="stylesheet" href="style.css" />
-    <!-- FontAwesome for modern icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+    <!-- ⚠️ NOTE: Storage SDK is REMOVED — no uploads -->
     <style>
         .form-section {
             background: #f8faf8;
@@ -21,20 +21,462 @@
             font-size: 16px;
             color: #1b5e20;
             margin-bottom: 12px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
         }
         .form-section h3 i {
             color: #2e7d32;
+            margin-right: 6px;
         }
+        .input-group {
+            margin-bottom: 16px;
+        }
+        .input-group label {
+            display: block;
+            font-size: 13px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 6px;
+        }
+        .input-group label i {
+            color: #2e7d32;
+            width: 18px;
+            margin-right: 4px;
+        }
+        .input-group input,
+        .input-group select {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #e0e0e0;
+            border-radius: 12px;
+            font-size: 16px;
+            background: #fafafa;
+            transition: border 0.2s;
+            box-sizing: border-box;
+        }
+        .input-group input:focus,
+        .input-group select:focus {
+            border-color: #2e7d32;
+            outline: none;
+            background: white;
+        }
+        .required { color: #d32f2f; margin-left: 2px; }
         .file-upload {
             border: 2px dashed #c8e6c9;
-            padding: 20px;
+            padding: 16px;
             border-radius: 12px;
             text-align: center;
             cursor: pointer;
             transition: all 0.2s;
+            background: #fafffe;
+            margin-bottom: 12px;
+        }
+        .file-upload:hover {
+            border-color: #2e7d32;
+            background: #e8f5e9;
+        }
+        .file-upload .icon { font-size: 28px; color: #2e7d32; }
+        .file-upload .text { font-size: 14px; color: #666; margin-top: 4px; }
+        .file-upload .filename { font-size: 12px; color: #2e7d32; font-weight: 600; margin-top: 4px; }
+        .file-upload .sub-text { font-size: 11px; color: #999; margin-top: 2px; }
+        .upload-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+        .upload-row .file-upload { padding: 12px; }
+        .upload-row .file-upload .icon { font-size: 22px; }
+        .submit-btn {
+            background: linear-gradient(135deg, #1b5e20, #2e7d32);
+            color: white;
+            border: none;
+            padding: 16px;
+            border-radius: 14px;
+            font-size: 18px;
+            font-weight: 700;
+            cursor: pointer;
+            width: 100%;
+            transition: all 0.3s;
+        }
+        .submit-btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(46, 125, 50, 0.3);
+        }
+        .submit-btn:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+            transform: none;
+        }
+        .submit-btn i { margin-right: 8px; }
+        .loading-spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,0.3);
+            border-radius: 50%;
+            border-top-color: #fff;
+            animation: spin 0.8s ease-in-out infinite;
+            vertical-align: middle;
+            margin-right: 8px;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        .success-message {
+            background: #e8f5e9;
+            padding: 20px;
+            border-radius: 12px;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .success-message .icon { font-size: 48px; color: #2e7d32; }
+        .success-message h3 { color: #1b5e20; margin-top: 8px; }
+        .success-message p { color: #555; font-size: 14px; }
+        .error-message {
+            background: #fce4ec;
+            padding: 16px;
+            border-radius: 12px;
+            text-align: center;
+            margin-bottom: 16px;
+            color: #c62828;
+        }
+        .error-message i { font-size: 24px; display: block; margin-bottom: 4px; }
+        .info-box {
+            background: #e3f2fd;
+            padding: 12px 16px;
+            border-radius: 12px;
+            margin-bottom: 16px;
+            font-size: 13px;
+            color: #0d47a1;
+        }
+        .info-box i { margin-right: 6px; }
+        .nav-bar {
+            display: flex;
+            justify-content: space-around;
+            padding: 12px 0 0 0;
+            border-top: 1px solid #e0e0e0;
+            margin-top: 24px;
+        }
+        .nav-bar a {
+            text-decoration: none;
+            color: #888;
+            font-size: 11px;
+            text-align: center;
+            flex: 1;
+            padding: 6px 0;
+            border-radius: 8px;
+            transition: all 0.2s;
+        }
+        .nav-bar a i {
+            display: block;
+            font-size: 20px;
+            margin-bottom: 2px;
+        }
+        .nav-bar a.active {
+            color: #2e7d32;
+            font-weight: 600;
+            background: #e8f5e9;
+        }
+        .nav-bar a:hover:not(.active) {
+            color: #1b5e20;
+            background: #f0f4f0;
+        }
+        .page-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .page-header h1 { color: #1b5e20; font-size: 22px; }
+        .page-header h1 i { color: #2e7d32; margin-right: 6px; }
+        .badge {
+            background: #e8f5e9;
+            color: #2e7d32;
+            padding: 4px 14px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        @media (max-width: 480px) {
+            .upload-row { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container" style="max-width: 450px;">
+    <!-- Header -->
+    <div class="page-header">
+        <h1><i class="fas fa-paper-plane"></i> Apply for Loan</h1>
+        <span class="badge"><i class="fas fa-plus-circle"></i> New</span>
+    </div>
+
+    <!-- Info Box -->
+    <div class="info-box">
+        <i class="fas fa-info-circle"></i>
+        In this version, your documents are <strong>not uploaded</strong> to storage. 
+        Only your loan details are saved.
+    </div>
+
+    <div id="message"></div>
+
+    <form id="loanForm" style="margin-top:8px;">
+        <!-- Personal Details -->
+        <div class="form-section">
+            <h3><i class="fas fa-user"></i> Personal Details</h3>
+
+            <div class="input-group">
+                <label><i class="fas fa-user-circle"></i> Full Name <span class="required">*</span></label>
+                <input type="text" id="fullName" placeholder="e.g., John Banda" required />
+            </div>
+
+            <div class="input-group">
+                <label><i class="fas fa-calendar-alt"></i> Date of Birth <span class="required">*</span></label>
+                <input type="date" id="dob" required />
+            </div>
+
+            <div class="input-group">
+                <label><i class="fas fa-id-card"></i> NRC Number <span class="required">*</span></label>
+                <input type="text" id="nrcNumber" placeholder="e.g., 123456/78/1" required />
+            </div>
+
+            <div class="input-group">
+                <label><i class="fas fa-phone-alt"></i> Mobile Money Number <span class="required">*</span></label>
+                <input type="tel" id="mobileMoney" placeholder="0977123456" required />
+            </div>
+        </div>
+
+        <!-- Loan Details -->
+        <div class="form-section">
+            <h3><i class="fas fa-coins"></i> Loan Details</h3>
+
+            <div class="input-group">
+                <label><i class="fas fa-money-bill-wave"></i> Amount (ZMW) <span class="required">*</span></label>
+                <input type="number" id="amount" placeholder="e.g., 500" min="50" required />
+            </div>
+
+            <div class="input-group">
+                <label><i class="fas fa-clock"></i> Repayment Period <span class="required">*</span></label>
+                <select id="period">
+                    <option value="7">7 days</option>
+                    <option value="14">14 days</option>
+                    <option value="30" selected>30 days</option>
+                    <option value="60">60 days</option>
+                    <option value="90">90 days</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Documents (Mock) -->
+        <div class="form-section">
+            <h3><i class="fas fa-file-alt"></i> Upload Documents</h3>
+
+            <label style="font-size:13px;font-weight:600;color:#333;display:block;margin-bottom:8px;">
+                <i class="fas fa-id-card" style="color:#2e7d32;"></i> NRC (Front & Back) <span class="required">*</span>
+            </label>
+
+            <div class="upload-row">
+                <div class="file-upload" id="nrcFrontUpload">
+                    <div class="icon"><i class="fas fa-id-card"></i></div>
+                    <div class="text">Front</div>
+                    <div class="filename" id="nrcFrontFilename">No file</div>
+                    <div class="sub-text">Tap to select</div>
+                    <input type="file" id="nrcFrontFile" accept="image/*" style="display:none;" />
+                </div>
+
+                <div class="file-upload" id="nrcBackUpload">
+                    <div class="icon"><i class="fas fa-id-card"></i></div>
+                    <div class="text">Back</div>
+                    <div class="filename" id="nrcBackFilename">No file</div>
+                    <div class="sub-text">Tap to select</div>
+                    <input type="file" id="nrcBackFile" accept="image/*" style="display:none;" />
+                </div>
+            </div>
+
+            <label style="font-size:13px;font-weight:600;color:#333;display:block;margin-top:12px;margin-bottom:8px;">
+                <i class="fas fa-file-pdf" style="color:#2e7d32;"></i> Pay Slip <span class="required">*</span>
+            </label>
+            <div class="file-upload" id="payslipUpload">
+                <div class="icon"><i class="fas fa-file-pdf"></i></div>
+                <div class="text">Upload your latest pay slip</div>
+                <div class="filename" id="payslipFilename">No file selected</div>
+                <div class="sub-text">PDF or Image accepted</div>
+                <input type="file" id="payslipFile" accept="image/*,application/pdf" style="display:none;" />
+            </div>
+        </div>
+
+        <button type="button" class="submit-btn" id="submitBtn">
+            <i class="fas fa-paper-plane"></i> Submit Application
+        </button>
+
+        <p style="text-align:center;font-size:12px;color:#999;margin-top:12px;">
+            <i class="fas fa-lock" style="margin-right:4px;"></i> Your documents are secure and encrypted
+        </p>
+    </form>
+
+    <!-- Bottom Navigation -->
+    <div class="nav-bar">
+        <a href="dashboard.html"><i class="fas fa-home"></i> Home</a>
+        <a href="apply.html" class="active"><i class="fas fa-paper-plane"></i> Apply</a>
+        <a href="repay.html"><i class="fas fa-hand-holding-usd"></i> Repay</a>
+        <a href="profile.html"><i class="fas fa-user"></i> Profile</a>
+        <a href="admin.html"><i class="fas fa-lock"></i> Admin</a>
+    </div>
+</div>
+
+<script src="config.js"></script>
+<script>
+// ============================================================
+// CHECK AUTH
+// ============================================================
+let currentUser = null;
+const submitBtn = document.getElementById('submitBtn');
+
+auth.onAuthStateChanged(function(user) {
+    if (!user) {
+        window.location.href = 'index.html';
+        return;
+    }
+    currentUser = user;
+    console.log('✅ User logged in:', user.email);
+});
+
+// ============================================================
+// FILE UPLOAD HANDLERS
+// ============================================================
+function setupFileUpload(uploadId, fileId, filenameId) {
+    const uploadEl = document.getElementById(uploadId);
+    const fileEl = document.getElementById(fileId);
+    const filenameEl = document.getElementById(filenameId);
+
+    uploadEl.addEventListener('click', function(e) {
+        e.stopPropagation();
+        fileEl.click();
+    });
+
+    fileEl.addEventListener('change', function() {
+        filenameEl.textContent = this.files[0] ? this.files[0].name : 'No file';
+    });
+}
+
+setupFileUpload('nrcFrontUpload', 'nrcFrontFile', 'nrcFrontFilename');
+setupFileUpload('nrcBackUpload', 'nrcBackFile', 'nrcBackFilename');
+setupFileUpload('payslipUpload', 'payslipFile', 'payslipFilename');
+
+// ============================================================
+// SUBMIT APPLICATION (NO FILE UPLOADS)
+// ============================================================
+submitBtn.addEventListener('click', async function() {
+    // --- Gather form data ---
+    const fullName = document.getElementById('fullName').value.trim();
+    const dob = document.getElementById('dob').value;
+    const nrcNumber = document.getElementById('nrcNumber').value.trim();
+    const mobileMoney = document.getElementById('mobileMoney').value.trim();
+    const amount = document.getElementById('amount').value;
+    const period = document.getElementById('period').value;
+    
+    const nrcFrontFile = document.getElementById('nrcFrontFile').files[0];
+    const nrcBackFile = document.getElementById('nrcBackFile').files[0];
+    const payslipFile = document.getElementById('payslipFile').files[0];
+
+    // --- Validation ---
+    if (!fullName) { alert('Please enter your full name'); return; }
+    if (!dob) { alert('Please select your date of birth'); return; }
+    if (!nrcNumber) { alert('Please enter your NRC number'); return; }
+    if (!mobileMoney) { alert('Please enter your mobile money number'); return; }
+    if (!amount || amount < 50) { alert('Please enter a valid amount (minimum K 50)'); return; }
+    if (!nrcFrontFile) { alert('Please select the FRONT of your NRC'); return; }
+    if (!nrcBackFile) { alert('Please select the BACK of your NRC'); return; }
+    if (!payslipFile) { alert('Please select your pay slip'); return; }
+
+    // --- Disable button ---
+    this.disabled = true;
+    this.innerHTML = '<span class="loading-spinner"></span> Submitting...';
+
+    try {
+        const user = auth.currentUser;
+        if (!user) throw new Error('Not logged in');
+
+        // Calculate loan details
+        const interest = Math.round(amount * 0.10);
+        const totalRepay = Number(amount) + interest;
+        const dueDate = new Date();
+        dueDate.setDate(dueDate.getDate() + Number(period));
+
+        // --- Save to Firestore (NO FILE UPLOADS) ---
+        await db.collection('loans').add({
+            userId: user.uid,
+            fullName: fullName,
+            dateOfBirth: dob,
+            nrcNumber: nrcNumber,
+            mobileMoney: mobileMoney,
+            amount: Number(amount),
+            interest: interest,
+            totalRepay: totalRepay,
+            period: Number(period),
+            // Store only file names (not actual files)
+            documents: {
+                nrcFront: nrcFrontFile ? nrcFrontFile.name : 'no-file',
+                nrcBack: nrcBackFile ? nrcBackFile.name : 'no-file',
+                paySlip: payslipFile ? payslipFile.name : 'no-file'
+            },
+            status: 'pending',
+            createdAt: new Date().toISOString(),
+            dueDate: dueDate.toISOString()
+        });
+
+        console.log('✅ Loan saved to Firestore (no file uploads)');
+
+        // --- Show success ---
+        document.getElementById('message').innerHTML = `
+            <div class="success-message">
+                <div class="icon"><i class="fas fa-check-circle"></i></div>
+                <h3>✅ Application Submitted!</h3>
+                <p>
+                    Amount: <strong>K${amount}</strong><br />
+                    Total to repay: <strong>K${totalRepay}</strong><br />
+                    Due: <strong>${dueDate.toLocaleDateString()}</strong>
+                </p>
+                <p style="margin-top:8px;font-size:13px;color:#666;">
+                    ⏳ Your application is now under review.
+                </p>
+                <p style="margin-top:8px;font-size:12px;color:#999;background:#e3f2fd;padding:8px;border-radius:8px;">
+                    <i class="fas fa-info-circle"></i> Note: Document files are not uploaded (testing mode).
+                </p>
+            </div>
+        `;
+
+        // --- Clear form ---
+        document.getElementById('fullName').value = '';
+        document.getElementById('dob').value = '';
+        document.getElementById('nrcNumber').value = '';
+        document.getElementById('mobileMoney').value = '';
+        document.getElementById('amount').value = '';
+        document.getElementById('nrcFrontFilename').textContent = 'No file';
+        document.getElementById('nrcBackFilename').textContent = 'No file';
+        document.getElementById('payslipFilename').textContent = 'No file selected';
+        document.getElementById('nrcFrontFile').value = '';
+        document.getElementById('nrcBackFile').value = '';
+        document.getElementById('payslipFile').value = '';
+
+    } catch (error) {
+        console.error('❌ ERROR:', error);
+        document.getElementById('message').innerHTML = `
+            <div class="error-message">
+                <i class="fas fa-exclamation-circle"></i>
+                <strong>Error submitting application</strong><br />
+                ${error.message}
+            </div>
+        `;
+        alert('❌ Error submitting application: ' + error.message);
+    }
+
+    // --- Re-enable button ---
+    this.disabled = false;
+    this.innerHTML = '<i class="fas fa-paper-plane"></i> Submit Application';
+});
+</script>
+
+</body>
+</html>            transition: all 0.2s;
             margin-bottom: 12px;
             background: #fafffe;
         }
