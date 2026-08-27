@@ -154,7 +154,6 @@
 <body>
 
 <div class="container" style="max-width: 450px;">
-    <!-- Header -->
     <div class="page-header">
         <h1><i class="fas fa-user"></i> My Profile</h1>
         <span class="badge" id="kycBadge"><i class="fas fa-clock"></i> Pending</span>
@@ -162,12 +161,10 @@
 
     <div id="message"></div>
 
-    <!-- Avatar & Name -->
     <div class="profile-avatar" id="avatar">👤</div>
     <div class="profile-name" id="displayName">Loading...</div>
     <div class="profile-email" id="displayEmail">Loading...</div>
 
-    <!-- Edit Form -->
     <div class="input-group">
         <label><i class="fas fa-phone-alt"></i> Phone Number</label>
         <input type="tel" id="phoneNumber" placeholder="0977123456" />
@@ -187,7 +184,6 @@
         <i class="fas fa-sign-out-alt"></i> Logout
     </button>
 
-    <!-- Bottom Navigation -->
     <div class="nav-bar">
         <a href="dashboard.html"><i class="fas fa-home"></i> Home</a>
         <a href="apply.html"><i class="fas fa-paper-plane"></i> Apply</a>
@@ -199,9 +195,6 @@
 
 <script src="config.js"></script>
 <script>
-// ============================================================
-// LOAD PROFILE
-// ============================================================
 auth.onAuthStateChanged(async function(user) {
     if (!user) {
         window.location.href = 'index.html';
@@ -237,9 +230,6 @@ auth.onAuthStateChanged(async function(user) {
     }
 });
 
-// ============================================================
-// UPDATE PROFILE
-// ============================================================
 document.getElementById('updateProfile').addEventListener('click', async function() {
     const user = auth.currentUser;
     if (!user) return;
@@ -248,22 +238,39 @@ document.getElementById('updateProfile').addEventListener('click', async functio
     const nrcNumber = document.getElementById('nrcNumber').value.trim();
 
     try {
+        const userDoc = await db.collection('users').doc(user.uid).get();
+        
+        if (!userDoc.exists) {
+            await db.collection('users').doc(user.uid).set({
+                fullName: user.displayName || '',
+                email: user.email || '',
+                phoneNumber: phoneNumber,
+                nrcNumber: nrcNumber,
+                role: 'user',
+                kycStatus: 'pending',
+                loanLimit: 0,
+                createdAt: new Date().toISOString()
+            });
+            document.getElementById('message').innerHTML = '✅ Profile created successfully!';
+            document.getElementById('message').style.color = '#2e7d32';
+            setTimeout(() => location.reload(), 1500);
+            return;
+        }
+
         await db.collection('users').doc(user.uid).update({
             phoneNumber: phoneNumber,
             nrcNumber: nrcNumber,
             updatedAt: new Date().toISOString()
         });
-        document.getElementById('message').innerHTML = '<i class="fas fa-check-circle"></i> Profile updated successfully!';
+        document.getElementById('message').innerHTML = '✅ Profile updated successfully!';
         document.getElementById('message').style.color = '#2e7d32';
         setTimeout(() => { document.getElementById('message').textContent = ''; }, 3000);
     } catch (error) {
-        alert('Error updating profile: ' + error.message);
+        console.error('Error:', error);
+        alert('Error: ' + error.message);
     }
 });
 
-// ============================================================
-// LOGOUT
-// ============================================================
 function logout() {
     auth.signOut().then(() => {
         window.location.href = 'index.html';
