@@ -46,6 +46,7 @@ googleBtn.addEventListener('click', async function() {
         showMessage(`✅ Welcome ${user.displayName || 'User'}!`);
 
         const userDoc = await db.collection('users').doc(user.uid).get();
+        
         if (!userDoc.exists) {
             await db.collection('users').doc(user.uid).set({
                 fullName: user.displayName || '',
@@ -54,11 +55,15 @@ googleBtn.addEventListener('click', async function() {
                 photoURL: user.photoURL || '',
                 role: 'user',
                 kycStatus: 'pending',
+                loanLimit: 0,
                 createdAt: new Date().toISOString()
             });
+            console.log('✅ New user profile created');
         }
+        
         window.location.href = 'dashboard.html';
     } catch (error) {
+        console.error('Login error:', error);
         showMessage(`❌ ${error.message}`, true);
     }
 });
@@ -67,9 +72,6 @@ auth.onAuthStateChanged(function(user) {
     if (user) window.location.href = 'dashboard.html';
 });
 </script>
-
-</body>
-</html></script>
 
 </body>
 </html>
