@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0c3b2c" />
+    <title>Money Tree — Sign in</title>
+    <link rel="stylesheet" href="style.css" />
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+</head>
+<body class="login-body">
+    <main class="login-card">
+        <div class="login-logo" aria-hidden="true">🌳</div>
+        <span class="eyebrow">Simple, transparent borrowing</span>
+        <h1>Money Tree</h1>
+        <p>Apply for a loan, follow its progress and understand every repayment in one place.</p>
+
+        <div id="message" class="message-space" role="status" aria-live="polite"></div>
+
+        <button class="google-btn" id="googleSignIn" type="button">
+            <img src="https://www.google.com/favicon.ico" alt="" />
+            <span>Continue with Google</span>
+        </button>
+
+        <p class="login-terms">
+            By continuing, you agree to Money Tree’s terms and privacy notice. Official wording is pending client approval.
+        </p>
+    </main>
+
+    <script src="config.js"></script>
+    <script>
+        const message = document.getElementById('message');
+        const signInButton = document.getElementById('googleSignIn');
+
+        function showMessage(text, error = false) {
+            message.textContent = text;
+            message.style.color = error ? '#b42318' : '#18794e';
+        }
+
+        async function ensureUserProfile(user) {
+            const userRef = db.collection('users').doc(user.uid);
+            const snapshot = await userRef.get();
+            if (!snapshot.exists) {
+                await userRef.set({
+                    fullName: user.displayName || '',
+                    email: user.email || '',
+                    phoneNumber: user.phoneNumber || '',
+                    photoURL: user.photoURL || '',
+                    role: 'user',
+                    kycStatus: 'pending',
+                    loanLimit: 0,
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                    createdAtISO: new Date().toISOString()
+                });
+            }
+        }
+
+        signInButton.addEventListener('click', async () => {
+            signInButton.disabled = true;
+            signInButton.querySelector('span').textContent = 'Signing in…';
+            try {
+                const provider = new firebase.auth.GoogleAuthProvider();
+                const result = await auth.signInWithPopup(provider);
+                await ensureUserProfile(result.user);
+                window.location.href = 'dashboard.html';
+            } catch (error) {
+                console.error('Sign-in error:', error);
+                showMessage(error.message || 'Sign-in was not completed. Please try again.', true);
+                signInButton.disabled = false;
+                signInButton.querySelector('span').textContent = 'Continue with Google';
+            }
+        });
+
+        auth.onAuthStateChanged(async user => {
+            if (!user) return;
+            try {
+                await ensureUserProfile(user);
+                window.location.href = 'dashboard.html';
+            } catch (error) {
+                console.error('Profile setup error:', error);
+                showMessage('Signed in, but your profile could not be loaded.', true);
+            }
+        });
+    </script>
+</body>
+</html>

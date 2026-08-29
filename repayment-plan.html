@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0c3b2c" />
+    <title>Money Tree — Repayment Plan</title>
+    <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+</head>
+<body class="app-body">
+    <main class="app-shell">
+        <header class="topbar">
+            <a id="backLink" class="icon-button" href="order.html" aria-label="Back to order"><i class="fas fa-arrow-left"></i></a>
+            <div class="topbar-title">
+                <h1>Repayment Plan</h1>
+                <p>Every instalment explained</p>
+            </div>
+            <button class="icon-button no-print" type="button" onclick="window.print()" aria-label="Print repayment plan"><i class="fas fa-print"></i></button>
+        </header>
+
+        <section id="planContent" class="page-content" aria-live="polite">
+            <div class="loading-state">
+                <i class="fas fa-circle-notch spin" aria-hidden="true"></i>
+                Loading your repayment plan…
+            </div>
+        </section>
+
+        <nav class="bottom-nav no-print" aria-label="Main navigation">
+            <a href="dashboard.html"><i class="fas fa-house"></i><span>Home</span></a>
+            <a href="apply.html"><i class="fas fa-file-signature"></i><span>Apply</span></a>
+            <a class="active" href="order.html"><i class="fas fa-receipt"></i><span>Orders</span></a>
+            <a href="repay.html"><i class="fas fa-wallet"></i><span>Repay</span></a>
+            <a href="profile.html"><i class="fas fa-user"></i><span>Me</span></a>
+        </nav>
+    </main>
+
+    <script src="config.js"></script>
+    <script src="loan-utils.js"></script>
+    <script>
+        const loanId = MoneyTreeLoans.loanIdFromUrl();
+        const content = document.getElementById('planContent');
+        let unsubscribe = null;
+
+        if (loanId) document.getElementById('backLink').href = `order.html?loan=${encodeURIComponent(loanId)}`;
+
+        auth.onAuthStateChanged(user => {
+            if (!user) {
+                window.location.href = 'index.html';
+                return;
+            }
+            if (!loanId) {
+                showError('Select a loan from the Order Center to view its repayment plan.');
+                return;
+            }
+            if (unsubscribe) unsubscribe();
+            unsubscribe = db.collection('loans').doc(loanId).onSnapshot(snapshot => {
+                if (!snapshot.exists || snapshot.data().userId !== user.uid) {
+                    showError('This repayment plan is not available in your account.');
+                    return;
+                }
+                renderPlan({ id: snapshot.id, ...snapshot.data() });
+            }, () => showError('The repayment plan could not be loaded.'));
+        });
+
+        function renderPlan(loan) {
+            const summary = MoneyTreeLoans.loanSummary(loan);
+            const installments = (loan.installments || []).map(MoneyTreeLoans.installmentView);
+            const number = MoneyTreeLoans.escapeHtml(loan.applicationNumber || `MT-${loan.id.slice(0, 8).toUpperCase()}`);
+
+            if (!installments.length) {
+                content.innerHTML = `
+                    <div class="notice"><strong>Schedule pending.</strong> A detailed repayment plan will be generated when the administrator confirms and disburses the loan.</div>
+                    <article class="card">
+                        <div class="card-header">
+                            <div><div class="loan-number">${number}</div><h2 class="loan-amount">${MoneyTreeLoans.money(summary.principal)}</h2></div>
+                            <span class="status-badge status-${MoneyTreeLoans.escapeHtml(loan.status || 'pending')}">${MoneyTreeLoans.statusLabel(loan.status)}</span>
+                        </div>
+                        <div class="detail-list">
+                            <div class="detail-row"><span>Preferred period</span><strong>${summary.termMonths} month${summary.termMonths === 1 ? '' : 's'}</strong></div>
+                            <div class="detail-row"><span>Final interest and fees</span><strong>Pending approval</strong></div>
+                        </div>
+                    </article>
+                `;
+                return;
+            }
+
+            content.innerHTML = `
+                ${loan.temporaryPolicy ? '<div class="draft-banner"><strong>Prototype calculation:</strong> this schedule uses temporary test rules and is not a final credit offer.</div>' : ''}
+                <article class="hero-card">
+                    <div class="hero-label">Total repayable</div>
+                    <div class="hero-amount">${MoneyTreeLoans.money(summary.totalRepay)}</div>
+                    <div class="hero-meta">Principal ${MoneyTreeLoans.money(summary.principal)} + interest and fees ${MoneyTreeLoans.money(summary.totalCostOfCredit)}</div>
+                </article>
+
+                <details class="accordion section-gap">
+                    <summary>Cost explanation</summary>
+                    <div class="accordion-content">
+                        <div class="detail-list">
+                            <div class="detail-row"><span>Approved principal</span><strong>${MoneyTreeLoans.money(summary.principal)}</strong></div>
+                            <div class="detail-row"><span>Total interest</span><strong>${MoneyTreeLoans.money(summary.totalInterest)}</strong></div>
+                            <div class="detail-row"><span>Total fees</span><strong>${MoneyTreeLoans.money(summary.totalFees)}</strong></div>
+                            <div class="detail-row"><span>Total repayment</span><strong>${MoneyTreeLoans.money(summary.totalRepay)}</strong></div>
+                        </div>
+                    </div>
+                </details>
+
+                <article class="card section-gap">
+                    <div class="card-header">
+                        <div>
+                            <h2 class="card-title">Repayment schedule</h2>
+                            <p class="card-subtitle">${MoneyTreeLoans.formatDate(loan.firstPaymentDate)} – ${MoneyTreeLoans.formatDate(loan.loanEndDate)}</p>
+                        </div>
+                        <span class="tag">${installments.length} terms</span>
+                    </div>
+
+                    <div class="schedule-timeline">
+                        ${installments.map(item => `
+                            <div class="schedule-item">
+                                <div class="schedule-term">
+                                    <strong>Term ${item.number}</strong>
+                                    <span>${MoneyTreeLoans.formatDate(item.dueDate)}</span>
+                                </div>
+                                <div class="schedule-dot ${item.status === 'overdue' ? 'overdue' : ''}"></div>
+                                <div class="schedule-payment">
+                                    <strong>${MoneyTreeLoans.money(item.amount)}</strong>
+                                    <small>Principal ${MoneyTreeLoans.money(item.principal)} · Interest ${MoneyTreeLoans.money(item.interest)} · Fees ${MoneyTreeLoans.money(item.fees)}</small>
+                                    ${item.paidAmount ? `<small>Paid ${MoneyTreeLoans.money(item.paidAmount)}</small>` : ''}
+                                    <span class="status-badge status-${item.status}">${item.status.charAt(0).toUpperCase() + item.status.slice(1)}</span>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </article>
+            `;
+        }
+
+        function showError(text) {
+            content.innerHTML = `<div class="error-box">${MoneyTreeLoans.escapeHtml(text)}</div>`;
+        }
+    </script>
+</body>
+</html>

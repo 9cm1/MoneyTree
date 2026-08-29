@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0c3b2c" />
+    <title>Money Tree — Profile</title>
+    <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+</head>
+<body class="app-body">
+    <main class="app-shell">
+        <header class="topbar">
+            <a class="icon-button" href="dashboard.html" aria-label="Back to dashboard"><i class="fas fa-arrow-left"></i></a>
+            <div class="topbar-title">
+                <h1>My Profile</h1>
+                <p>Account and support</p>
+            </div>
+            <span id="kycBadge" class="status-badge status-pending">KYC pending</span>
+        </header>
+
+        <section class="page-content">
+            <article class="card profile-hero">
+                <div id="avatar" class="profile-avatar">MT</div>
+                <div id="displayName" class="profile-name">Loading…</div>
+                <div id="displayEmail" class="profile-email">Loading…</div>
+            </article>
+
+            <div id="message" class="message-space" role="status" aria-live="polite"></div>
+
+            <form id="profileForm" class="form-section">
+                <h3><i class="far fa-address-card"></i> Contact and identity</h3>
+                <div class="field">
+                    <label for="phoneNumber">Phone number</label>
+                    <input id="phoneNumber" type="tel" inputmode="tel" autocomplete="tel" placeholder="0977123456" />
+                </div>
+                <div class="field">
+                    <label for="nrcNumber">NRC number</label>
+                    <input id="nrcNumber" autocomplete="off" placeholder="123456/78/1" />
+                    <small>This is sensitive information. Firestore rules must be deployed before real customer use.</small>
+                </div>
+                <button id="saveButton" class="btn btn-primary btn-block" type="submit"><i class="fas fa-floppy-disk"></i> Save changes</button>
+            </form>
+
+            <div class="link-list section-gap">
+                <a href="user-care.html"><span><i class="far fa-circle-question"></i> User Care and complaints</span><i class="fas fa-chevron-right"></i></a>
+                <a href="order.html"><span><i class="fas fa-receipt"></i> My loan orders</span><i class="fas fa-chevron-right"></i></a>
+                <a id="adminLink" class="hide" href="admin.html"><span><i class="fas fa-shield-halved"></i> Admin portal</span><i class="fas fa-chevron-right"></i></a>
+            </div>
+
+            <button id="logoutButton" class="btn btn-danger btn-block section-gap" type="button"><i class="fas fa-arrow-right-from-bracket"></i> Sign out</button>
+        </section>
+
+        <nav class="bottom-nav" aria-label="Main navigation">
+            <a href="dashboard.html"><i class="fas fa-house"></i><span>Home</span></a>
+            <a href="apply.html"><i class="fas fa-file-signature"></i><span>Apply</span></a>
+            <a href="order.html"><i class="fas fa-receipt"></i><span>Orders</span></a>
+            <a href="repay.html"><i class="fas fa-wallet"></i><span>Repay</span></a>
+            <a class="active" href="profile.html"><i class="fas fa-user"></i><span>Me</span></a>
+        </nav>
+    </main>
+
+    <script src="config.js"></script>
+    <script>
+        let currentUser = null;
+        const form = document.getElementById('profileForm');
+        const message = document.getElementById('message');
+
+        auth.onAuthStateChanged(async user => {
+            if (!user) {
+                window.location.href = 'index.html';
+                return;
+            }
+            currentUser = user;
+            document.getElementById('displayName').textContent = user.displayName || 'Money Tree customer';
+            document.getElementById('displayEmail').textContent = user.email || 'No email available';
+
+            try {
+                const snapshot = await db.collection('users').doc(user.uid).get();
+                const profile = snapshot.exists ? snapshot.data() : {};
+                const name = profile.fullName || user.displayName || 'Money Tree customer';
+                document.getElementById('displayName').textContent = name;
+                document.getElementById('displayEmail').textContent = profile.email || user.email || 'No email available';
+                document.getElementById('phoneNumber').value = profile.phoneNumber || '';
+                document.getElementById('nrcNumber').value = profile.nrcNumber || '';
+                document.getElementById('avatar').textContent = name.split(/\s+/).filter(Boolean).map(part => part[0]).join('').slice(0, 2).toUpperCase() || 'MT';
+
+                const verified = profile.kycStatus === 'verified';
+                const badge = document.getElementById('kycBadge');
+                badge.textContent = verified ? 'KYC verified' : 'KYC pending';
+                badge.className = `status-badge ${verified ? 'status-approved' : 'status-pending'}`;
+                if (profile.role === 'admin') document.getElementById('adminLink').classList.remove('hide');
+            } catch (error) {
+                console.error('Profile load error:', error);
+                showMessage('Your profile could not be loaded.', true);
+            }
+        });
+
+        form.addEventListener('submit', async event => {
+            event.preventDefault();
+            if (!currentUser) return;
+            const button = document.getElementById('saveButton');
+            button.disabled = true;
+            try {
+                await db.collection('users').doc(currentUser.uid).set({
+                    phoneNumber: document.getElementById('phoneNumber').value.trim(),
+                    nrcNumber: document.getElementById('nrcNumber').value.trim(),
+                    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                }, { merge: true });
+                showMessage('Profile updated successfully.');
+            } catch (error) {
+                console.error('Profile update error:', error);
+                showMessage(error.message || 'Your changes could not be saved.', true);
+            } finally {
+                button.disabled = false;
+            }
+        });
+
+        document.getElementById('logoutButton').addEventListener('click', async () => {
+            await auth.signOut();
+            window.location.href = 'index.html';
+        });
+
+        function showMessage(text, error = false) {
+            message.textContent = text;
+            message.style.color = error ? '#b42318' : '#18794e';
+        }
+    </script>
+</body>
+</html>

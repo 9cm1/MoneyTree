@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0c3b2c" />
+    <title>Money Tree — Repay</title>
+    <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+</head>
+<body class="app-body">
+    <main class="app-shell">
+        <header class="topbar">
+            <a class="icon-button" href="dashboard.html" aria-label="Back to dashboard"><i class="fas fa-arrow-left"></i></a>
+            <div class="topbar-title">
+                <h1>Repay</h1>
+                <p>Upcoming and overdue instalments</p>
+            </div>
+            <a class="icon-button" href="user-care.html" aria-label="Get repayment help"><i class="far fa-message"></i></a>
+        </header>
+
+        <section class="page-content">
+            <div class="notice">
+                <strong>Prototype payment process:</strong> payments are currently recorded by the administrator. The client must supply the official mobile-money, bank or payroll payment instructions before launch.
+            </div>
+
+            <div id="repaymentList" class="loading-state section-gap" aria-live="polite">
+                <i class="fas fa-circle-notch spin" aria-hidden="true"></i>
+                Loading active loans…
+            </div>
+
+            <details class="accordion section-gap" open>
+                <summary>How to make a payment</summary>
+                <div class="accordion-content">
+                    <ol>
+                        <li>Use only the official Money Tree payment channel supplied by the client.</li>
+                        <li>Use your application number as the payment reference.</li>
+                        <li>Keep the transaction confirmation until it appears in your Order Center.</li>
+                        <li>Contact User Care if a valid payment has not appeared after the client’s stated processing time.</li>
+                    </ol>
+                    <p><strong>Official payment details:</strong> [Client to provide.]</p>
+                </div>
+            </details>
+        </section>
+
+        <nav class="bottom-nav" aria-label="Main navigation">
+            <a href="dashboard.html"><i class="fas fa-house"></i><span>Home</span></a>
+            <a href="apply.html"><i class="fas fa-file-signature"></i><span>Apply</span></a>
+            <a href="order.html"><i class="fas fa-receipt"></i><span>Orders</span></a>
+            <a class="active" href="repay.html"><i class="fas fa-wallet"></i><span>Repay</span></a>
+            <a href="profile.html"><i class="fas fa-user"></i><span>Me</span></a>
+        </nav>
+    </main>
+
+    <script src="config.js"></script>
+    <script src="loan-utils.js"></script>
+    <script>
+        const list = document.getElementById('repaymentList');
+        let unsubscribe = null;
+
+        auth.onAuthStateChanged(user => {
+            if (!user) {
+                window.location.href = 'index.html';
+                return;
+            }
+            if (unsubscribe) unsubscribe();
+            unsubscribe = db.collection('loans').where('userId', '==', user.uid).onSnapshot(snapshot => {
+                const loans = snapshot.docs
+                    .map(doc => ({ id: doc.id, ...doc.data() }))
+                    .filter(loan => ['active', 'disbursed'].includes(loan.status));
+                renderLoans(loans);
+            }, () => showError('Active loans could not be loaded.'));
+        });
+
+        function renderLoans(loans) {
+            if (!loans.length) {
+                list.className = 'empty-state section-gap';
+                list.innerHTML = `
+                    <i class="fas fa-circle-check" aria-hidden="true"></i>
+                    <h3>No active repayments</h3>
+                    <p>You do not currently have an active loan instalment to pay.</p>
+                `;
+                return;
+            }
+
+            list.className = 'section-gap';
+            list.innerHTML = loans.map(loan => {
+                const summary = MoneyTreeLoans.loanSummary(loan);
+                const next = MoneyTreeLoans.nextInstallment(loan);
+                const dueAmount = next ? Math.max(0, next.amount - next.paidAmount) : summary.remainingBalance;
+                const status = next?.status || 'upcoming';
+                return `
+                    <article class="card">
+                        <div class="card-header">
+                            <div>
+                                <div class="loan-number">${MoneyTreeLoans.escapeHtml(loan.applicationNumber || `MT-${loan.id.slice(0, 8).toUpperCase()}`)}</div>
+                                <h2 class="loan-amount">${MoneyTreeLoans.money(dueAmount)}</h2>
+                                <p class="card-subtitle">${next ? `Due ${MoneyTreeLoans.formatDate(next.dueDate)}` : 'No further scheduled instalments'}</p>
+                            </div>
+                            <span class="status-badge status-${status}">${status.charAt(0).toUpperCase() + status.slice(1)}</span>
+                        </div>
+                        <div class="detail-list">
+                            <div class="detail-row"><span>Remaining loan balance</span><strong>${MoneyTreeLoans.money(summary.remainingBalance)}</strong></div>
+                            <div class="detail-row"><span>Repayment method</span><strong>${MoneyTreeLoans.escapeHtml(summary.repaymentMethod)}</strong></div>
+                        </div>
+                        <div class="action-row">
+                            <a class="btn btn-secondary" href="repayment-plan.html?loan=${encodeURIComponent(loan.id)}">View full plan</a>
+                            <a class="btn btn-outline" href="order.html?loan=${encodeURIComponent(loan.id)}">Order Center</a>
+                        </div>
+                    </article>
+                `;
+            }).join('');
+        }
+
+        function showError(text) {
+            list.className = 'error-box section-gap';
+            list.textContent = text;
+        }
+    </script>
+</body>
+</html>

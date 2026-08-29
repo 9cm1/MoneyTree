@@ -1,0 +1,10 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /{allPaths=**} {
+      // Document upload is intentionally disabled in this prototype.
+      allow read, write: if false;
+    }
+  }
+}

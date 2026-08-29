@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0c3b2c" />
+    <title>Money Tree — Key Facts Statement</title>
+    <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+</head>
+<body class="app-body">
+    <main class="app-shell">
+        <header class="topbar">
+            <a id="backLink" class="icon-button" href="order.html" aria-label="Back to order"><i class="fas fa-arrow-left"></i></a>
+            <div class="topbar-title">
+                <h1>Key Facts Statement</h1>
+                <p>Understand the full cost before accepting</p>
+            </div>
+            <button class="icon-button no-print" type="button" onclick="window.print()" aria-label="Print Key Facts Statement"><i class="fas fa-print"></i></button>
+        </header>
+
+        <section class="page-content document-page">
+            <div class="draft-banner no-print">
+                <strong>Draft for client review:</strong> financial figures may use temporary test rules, while legal wording, contact information and regulatory disclosures require the client’s written approval.
+            </div>
+            <div id="kfsContent" class="loading-state" aria-live="polite">
+                <i class="fas fa-circle-notch spin" aria-hidden="true"></i>
+                Preparing the Key Facts Statement…
+            </div>
+        </section>
+
+        <nav class="bottom-nav no-print" aria-label="Main navigation">
+            <a href="dashboard.html"><i class="fas fa-house"></i><span>Home</span></a>
+            <a href="apply.html"><i class="fas fa-file-signature"></i><span>Apply</span></a>
+            <a class="active" href="order.html"><i class="fas fa-receipt"></i><span>Orders</span></a>
+            <a href="repay.html"><i class="fas fa-wallet"></i><span>Repay</span></a>
+            <a href="profile.html"><i class="fas fa-user"></i><span>Me</span></a>
+        </nav>
+    </main>
+
+    <script src="config.js"></script>
+    <script src="loan-utils.js"></script>
+    <script>
+        const loanId = MoneyTreeLoans.loanIdFromUrl();
+        const content = document.getElementById('kfsContent');
+
+        if (loanId) document.getElementById('backLink').href = `order.html?loan=${encodeURIComponent(loanId)}`;
+
+        auth.onAuthStateChanged(async user => {
+            if (!user) {
+                window.location.href = 'index.html';
+                return;
+            }
+            if (!loanId) {
+                showError('Select a loan from the Order Center to view its Key Facts Statement.');
+                return;
+            }
+            try {
+                const snapshot = await db.collection('loans').doc(loanId).get();
+                if (!snapshot.exists || snapshot.data().userId !== user.uid) {
+                    showError('This Key Facts Statement is not available in your account.');
+                    return;
+                }
+                renderKfs({ id: snapshot.id, ...snapshot.data() });
+            } catch (error) {
+                console.error('KFS load error:', error);
+                showError('The Key Facts Statement could not be loaded.');
+            }
+        });
+
+        function renderKfs(loan) {
+            const summary = MoneyTreeLoans.loanSummary(loan);
+            const installments = (loan.installments || []).map(MoneyTreeLoans.installmentView);
+            const number = MoneyTreeLoans.escapeHtml(loan.applicationNumber || `MT-${loan.id.slice(0, 8).toUpperCase()}`);
+            const borrower = MoneyTreeLoans.escapeHtml(loan.fullName || 'Money Tree customer');
+            const durationDays = loan.firstPaymentDate && loan.loanEndDate
+                ? Math.max(1, Math.ceil((MoneyTreeLoans.toDate(loan.loanEndDate) - MoneyTreeLoans.toDate(loan.firstPaymentDate)) / 86400000) + 30)
+                : summary.termMonths * 30;
+
+            content.className = 'document';
+            content.innerHTML = `
+                <header class="document-header">
+                    <span class="eyebrow">Money Tree</span>
+                    <h2>Key Facts Statement for Consumer Credit</h2>
+                    <p>Review carefully before agreeing to a loan. You have the right to receive a copy of the final loan agreement.</p>
+                </header>
+
+                <section class="document-section">
+                    <h3>Section 1: Key terms</h3>
+                    <div class="document-grid">
+                        <div class="document-grid-title">Loan description</div>
+                        <div class="detail-row"><span>Amount of loan</span><strong>${MoneyTreeLoans.money(summary.principal)}</strong></div>
+                        <div class="detail-row"><span>Duration of loan agreement</span><strong>${summary.termMonths} months (approximately ${durationDays} days)</strong></div>
+                        <div class="detail-row"><span>Amount received by borrower</span><strong>${MoneyTreeLoans.money(summary.disbursedAmount)}</strong></div>
+                    </div>
+
+                    <div class="document-grid section-gap">
+                        <div class="document-grid-title">Cost of credit</div>
+                        <div class="detail-row"><span>Total interest</span><strong>${MoneyTreeLoans.money(summary.totalInterest)}</strong></div>
+                        <div class="detail-row"><span>Other fees and charges</span><strong>${MoneyTreeLoans.money(summary.totalFees)}</strong></div>
+                        <div class="detail-row"><span>Indicative annualised rate*</span><strong>${summary.annualPercentageRate.toFixed(2)}%</strong></div>
+                        <div class="detail-row"><span>Total cost of credit</span><strong>${MoneyTreeLoans.money(summary.totalCostOfCredit)}</strong></div>
+                    </div>
+                    <p style="margin-top:8px;color:#66746e;">*Prototype annualised figure only. The client must provide the approved APR calculation and disclosure before launch.</p>
+
+                    <div class="document-grid section-gap">
+                        <div class="document-grid-title">Repayment schedule</div>
+                        <div class="detail-row"><span>Date first payment due</span><strong>${MoneyTreeLoans.formatDate(loan.firstPaymentDate)}</strong></div>
+                        <div class="detail-row"><span>Number of payments</span><strong>${installments.length || summary.termMonths}</strong></div>
+                        <div class="detail-row"><span>Payment frequency</span><strong>${MoneyTreeLoans.escapeHtml(summary.paymentFrequency)}</strong></div>
+                        <div class="detail-row"><span>Typical payment amount</span><strong>${MoneyTreeLoans.money(loan.installmentAmount || installments[0]?.amount || 0)}</strong></div>
+                        <div class="detail-row"><span>Total amount payable</span><strong>${MoneyTreeLoans.money(summary.totalRepay)}</strong></div>
+                    </div>
+                </section>
+
+                <section class="document-section">
+                    <h3>Section 2: Risk to you</h3>
+                    <ul>
+                        <li>Late or missed payments may increase your costs and may affect your ability to borrow in the future, subject to the final approved agreement.</li>
+                        <li>Only accept a loan if the repayment amount fits your regular budget.</li>
+                        <li>Ask Money Tree to explain any rate, fee or condition that is not clear before accepting.</li>
+                    </ul>
+                </section>
+
+                <section class="document-section">
+                    <h3>Section 3: Your rights and obligations</h3>
+                    <h4>Your rights</h4>
+                    <ul>
+                        <li>Clear information about the total cost and repayment schedule.</li>
+                        <li>Fair treatment and appropriate protection of personal information.</li>
+                        <li>A copy of the final agreement and a channel for complaints or redress.</li>
+                    </ul>
+                    <h4>Your obligations</h4>
+                    <ul>
+                        <li>Provide accurate information and promptly report important changes.</li>
+                        <li>Read the final agreement and make repayments on the agreed dates.</li>
+                        <li>Contact Money Tree early if you expect difficulty making a payment.</li>
+                    </ul>
+                    <p style="margin-top:10px;"><strong>Questions or complaints:</strong> [Client to provide official Money Tree phone, email, address and escalation procedure.]</p>
+                </section>
+
+                <section class="document-section">
+                    <h3>Section 4: Upfront and recurring fees</h3>
+                    <div class="document-grid">
+                        <div class="detail-row"><span>Arrangement fee</span><strong>${MoneyTreeLoans.money(loan.arrangementFee || 0)}</strong></div>
+                        <div class="detail-row"><span>Monthly administration fee</span><strong>${MoneyTreeLoans.money(loan.monthlyAdminFee || 0)}</strong></div>
+                        <div class="detail-row"><span>Total fees and charges</span><strong>${MoneyTreeLoans.money(summary.totalFees)}</strong></div>
+                    </div>
+                </section>
+
+                <section class="document-section">
+                    <h3>Section 5: Important terms and conditions</h3>
+                    <div class="document-grid">
+                        <div class="detail-row"><span>Late-payment fee</span><strong>[Client to confirm]</strong></div>
+                        <div class="detail-row"><span>Default interest</span><strong>[Client to confirm]</strong></div>
+                        <div class="detail-row"><span>Collateral or mandatory savings</span><strong>[Client to confirm]</strong></div>
+                        <div class="detail-row"><span>Early settlement</span><strong>[Client to confirm]</strong></div>
+                    </div>
+                </section>
+
+                <section class="document-section">
+                    <h3>Section 6: Detailed repayment schedule</h3>
+                    ${installments.length ? `
+                        <div class="table-wrap">
+                            <table>
+                                <thead><tr><th>No.</th><th>Due date</th><th>Payment</th><th>Principal</th><th>Interest</th><th>Fees</th></tr></thead>
+                                <tbody>
+                                    ${installments.map(item => `<tr><td>${item.number}</td><td>${MoneyTreeLoans.formatDate(item.dueDate)}</td><td>${MoneyTreeLoans.money(item.amount)}</td><td>${MoneyTreeLoans.money(item.principal)}</td><td>${MoneyTreeLoans.money(item.interest)}</td><td>${MoneyTreeLoans.money(item.fees)}</td></tr>`).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    ` : '<div class="notice">The final repayment schedule will appear after the loan is approved and disbursed.</div>'}
+                </section>
+
+                <section class="document-section">
+                    <h3>Statement details</h3>
+                    <div class="document-grid">
+                        <div class="detail-row"><span>Name of borrower</span><strong>${borrower}</strong></div>
+                        <div class="detail-row"><span>Application number</span><strong>${number}</strong></div>
+                        <div class="detail-row"><span>Date prepared</span><strong>${MoneyTreeLoans.formatDate(new Date())}</strong></div>
+                    </div>
+                </section>
+            `;
+        }
+
+        function showError(text) {
+            content.className = 'error-box';
+            content.textContent = text;
+        }
+    </script>
+</body>
+</html>

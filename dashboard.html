@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0c3b2c" />
+    <title>Money Tree — Dashboard</title>
+    <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+</head>
+<body class="app-body">
+    <main class="app-shell">
+        <header class="topbar">
+            <div class="brand-lockup">
+                <div class="brand-mark" aria-hidden="true">🌳</div>
+                <div class="topbar-title">
+                    <h1>Money Tree</h1>
+                    <p>Your loan account</p>
+                </div>
+            </div>
+            <span id="kycBadge" class="status-badge status-pending">KYC pending</span>
+        </header>
+
+        <section class="page-content">
+            <div class="page-intro">
+                <div>
+                    <span class="eyebrow">Welcome back</span>
+                    <h2 id="userName">Loading…</h2>
+                    <p id="userContact">We’re loading your account information.</p>
+                </div>
+                <a class="btn btn-outline btn-small" href="user-care.html"><i class="fa-regular fa-message"></i> Help</a>
+            </div>
+
+            <div id="accountSummary" class="hero-card hide" aria-live="polite"></div>
+
+            <div class="card section-gap">
+                <div class="card-header">
+                    <div>
+                        <h3 class="card-title">My loans</h3>
+                        <p class="card-subtitle">Applications and active loan accounts</p>
+                    </div>
+                    <span id="loanCount" class="tag">0 loans</span>
+                </div>
+                <div id="loanList" class="loading-state">
+                    <i class="fas fa-circle-notch spin" aria-hidden="true"></i>
+                    Loading your loans…
+                </div>
+            </div>
+        </section>
+
+        <nav class="bottom-nav" aria-label="Main navigation">
+            <a class="active" href="dashboard.html"><i class="fas fa-house"></i><span>Home</span></a>
+            <a href="apply.html"><i class="fas fa-file-signature"></i><span>Apply</span></a>
+            <a href="order.html"><i class="fas fa-receipt"></i><span>Orders</span></a>
+            <a href="repay.html"><i class="fas fa-wallet"></i><span>Repay</span></a>
+            <a href="profile.html"><i class="fas fa-user"></i><span>Me</span></a>
+        </nav>
+    </main>
+
+    <script src="config.js"></script>
+    <script src="loan-utils.js"></script>
+    <script>
+        let unsubscribeLoans = null;
+
+        auth.onAuthStateChanged(async user => {
+            if (!user) {
+                window.location.href = 'index.html';
+                return;
+            }
+
+            try {
+                const userSnapshot = await db.collection('users').doc(user.uid).get();
+                const profile = userSnapshot.exists ? userSnapshot.data() : {};
+                document.getElementById('userName').textContent = profile.fullName || user.displayName || 'Money Tree customer';
+                document.getElementById('userContact').textContent = profile.phoneNumber || profile.email || user.email || 'Complete your profile to add contact details.';
+
+                const badge = document.getElementById('kycBadge');
+                const verified = profile.kycStatus === 'verified';
+                badge.textContent = verified ? 'KYC verified' : 'KYC pending';
+                badge.className = `status-badge ${verified ? 'status-approved' : 'status-pending'}`;
+            } catch (error) {
+                console.error('Profile load error:', error);
+            }
+
+            if (unsubscribeLoans) unsubscribeLoans();
+            unsubscribeLoans = db.collection('loans')
+                .where('userId', '==', user.uid)
+                .onSnapshot(renderLoans, showLoanError);
+        });
+
+        function renderLoans(snapshot) {
+            const loans = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            loans.sort((a, b) => {
+                const left = MoneyTreeLoans.toDate(a.createdAt) || MoneyTreeLoans.toDate(a.createdAtISO) || new Date(0);
+                const right = MoneyTreeLoans.toDate(b.createdAt) || MoneyTreeLoans.toDate(b.createdAtISO) || new Date(0);
+                return right - left;
+            });
+
+            document.getElementById('loanCount').textContent = `${loans.length} loan${loans.length === 1 ? '' : 's'}`;
+            renderAccountSummary(loans);
+
+            const list = document.getElementById('loanList');
+            if (!loans.length) {
+                list.className = 'empty-state';
+                list.innerHTML = `
+                    <i class="fas fa-seedling" aria-hidden="true"></i>
+                    <h3>No loan applications yet</h3>
+                    <p>Start an application and track every step from this dashboard.</p>
+                    <a class="btn btn-primary" href="apply.html">Apply for a loan</a>
+                `;
+                return;
+            }
+
+            list.className = '';
+            list.innerHTML = loans.map(loan => {
+                const summary = MoneyTreeLoans.loanSummary(loan);
+                const progress = summary.totalRepay > 0 ? Math.min(100, (summary.totalPaid / summary.totalRepay) * 100) : 0;
+                const number = MoneyTreeLoans.escapeHtml(loan.applicationNumber || `MT-${loan.id.slice(0, 8).toUpperCase()}`);
+                const date = MoneyTreeLoans.formatDate(loan.createdAt || loan.createdAtISO);
+                return `
+                    <article class="loan-card">
+                        <div class="loan-card-top">
+                            <div>
+                                <div class="loan-number">${number}</div>
+                                <div class="loan-amount">${MoneyTreeLoans.money(summary.principal)}</div>
+                                <div class="loan-meta">Applied ${date} · ${summary.termMonths} month${summary.termMonths === 1 ? '' : 's'}</div>
+                            </div>
+                            <span class="status-badge status-${MoneyTreeLoans.escapeHtml(loan.status || 'pending')}">${MoneyTreeLoans.statusLabel(loan.status)}</span>
+                        </div>
+                        ${['active', 'repaid', 'disbursed'].includes(loan.status) ? `
+                            <div class="progress-track" aria-label="Repayment progress">
+                                <div class="progress-fill" style="width:${progress.toFixed(1)}%"></div>
+                            </div>
+                            <div class="loan-meta">${MoneyTreeLoans.money(summary.totalPaid)} paid of ${MoneyTreeLoans.money(summary.totalRepay)}</div>
+                        ` : ''}
+                        <div class="action-row">
+                            <a class="btn btn-secondary btn-small" href="order.html?loan=${encodeURIComponent(loan.id)}">View details</a>
+                        </div>
+                    </article>
+                `;
+            }).join('');
+        }
+
+        function renderAccountSummary(loans) {
+            const activeLoan = loans.find(loan => ['active', 'disbursed'].includes(loan.status));
+            const card = document.getElementById('accountSummary');
+            if (!activeLoan) {
+                card.classList.add('hide');
+                return;
+            }
+
+            const summary = MoneyTreeLoans.loanSummary(activeLoan);
+            const next = MoneyTreeLoans.nextInstallment(activeLoan);
+            card.innerHTML = `
+                <div class="hero-label">Remaining loan balance</div>
+                <div class="hero-amount">${MoneyTreeLoans.money(summary.remainingBalance)}</div>
+                <div class="hero-meta">${next ? `Next payment ${MoneyTreeLoans.money(Math.max(0, next.amount - next.paidAmount))} · ${MoneyTreeLoans.formatDate(next.dueDate)}` : 'Your repayment schedule is being prepared.'}</div>
+                <div class="action-row">
+                    <a class="btn btn-secondary btn-small" href="repayment-plan.html?loan=${encodeURIComponent(activeLoan.id)}">View repayment plan</a>
+                </div>
+            `;
+            card.classList.remove('hide');
+        }
+
+        function showLoanError(error) {
+            console.error('Loan load error:', error);
+            const list = document.getElementById('loanList');
+            list.className = 'error-box';
+            list.textContent = 'Your loans could not be loaded. Please refresh and try again.';
+        }
+    </script>
+</body>
+</html>

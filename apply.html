@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0c3b2c" />
+    <title>Money Tree — Apply</title>
+    <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+</head>
+<body class="app-body">
+    <main class="app-shell">
+        <header class="topbar">
+            <a class="icon-button" href="dashboard.html" aria-label="Back to dashboard"><i class="fas fa-arrow-left"></i></a>
+            <div class="topbar-title">
+                <h1>Apply for a loan</h1>
+                <p>Tell us what you need</p>
+            </div>
+            <a class="icon-button" href="user-care.html" aria-label="Get help"><i class="far fa-message"></i></a>
+        </header>
+
+        <section class="page-content">
+            <div class="draft-banner">
+                <strong>Prototype pricing:</strong> final interest, fees and approval conditions will be confirmed by the client before launch. Your application does not guarantee approval.
+            </div>
+
+            <div id="message" class="message-space" role="status" aria-live="polite"></div>
+
+            <form id="loanForm" novalidate>
+                <section class="form-section">
+                    <h3><i class="far fa-user"></i> Personal details</h3>
+                    <div class="form-grid">
+                        <div class="field">
+                            <label for="fullName">Full name <span class="required">*</span></label>
+                            <input id="fullName" name="fullName" autocomplete="name" required />
+                        </div>
+                        <div class="field">
+                            <label for="dob">Date of birth <span class="required">*</span></label>
+                            <input id="dob" name="dob" type="date" required />
+                        </div>
+                        <div class="field">
+                            <label for="nrcNumber">NRC number <span class="required">*</span></label>
+                            <input id="nrcNumber" name="nrcNumber" placeholder="123456/78/1" required />
+                        </div>
+                        <div class="field">
+                            <label for="mobileMoney">Mobile money number <span class="required">*</span></label>
+                            <input id="mobileMoney" name="mobileMoney" type="tel" inputmode="tel" placeholder="0977123456" required />
+                        </div>
+                    </div>
+                </section>
+
+                <section class="form-section">
+                    <h3><i class="fas fa-coins"></i> Loan request</h3>
+                    <div class="form-grid">
+                        <div class="field">
+                            <label for="amount">Requested amount (ZMW) <span class="required">*</span></label>
+                            <input id="amount" name="amount" type="number" inputmode="decimal" min="50" step="50" placeholder="500" required />
+                        </div>
+                        <div class="field">
+                            <label for="termMonths">Preferred repayment period <span class="required">*</span></label>
+                            <select id="termMonths" name="termMonths" required>
+                                <option value="1">1 month</option>
+                                <option value="3">3 months</option>
+                                <option value="6" selected>6 months</option>
+                                <option value="9">9 months</option>
+                                <option value="12">12 months</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="field">
+                        <label for="purpose">Purpose of the loan <span class="required">*</span></label>
+                        <textarea id="purpose" name="purpose" maxlength="240" placeholder="Briefly explain what the loan will be used for" required></textarea>
+                        <small>Maximum 240 characters.</small>
+                    </div>
+                </section>
+
+                <section class="form-section">
+                    <h3><i class="far fa-folder-open"></i> Supporting documents</h3>
+                    <div class="notice">
+                        Files selected in this prototype are <strong>not uploaded</strong> and never leave your device. The client must configure protected document storage before launch.
+                    </div>
+                    <div class="upload-grid section-gap">
+                        <label class="file-upload" for="nrcFile">
+                            <span class="icon"><i class="far fa-id-card"></i></span>
+                            <span class="text">NRC copy</span>
+                            <span id="nrcFilename" class="filename">Optional in prototype</span>
+                            <input id="nrcFile" type="file" accept="image/*,application/pdf" hidden />
+                        </label>
+                        <label class="file-upload" for="payslipFile">
+                            <span class="icon"><i class="far fa-file-lines"></i></span>
+                            <span class="text">Latest payslip</span>
+                            <span id="payslipFilename" class="filename">Optional in prototype</span>
+                            <input id="payslipFile" type="file" accept="image/*,application/pdf" hidden />
+                        </label>
+                    </div>
+                </section>
+
+                <section class="form-section">
+                    <div class="field">
+                        <label style="display:flex;gap:10px;align-items:flex-start;font-weight:600;">
+                            <input id="consent" type="checkbox" style="width:auto;min-height:0;margin-top:3px;" required />
+                            <span>I confirm that the information supplied is accurate and understand that final loan terms will be shown in the Key Facts Statement before acceptance.</span>
+                        </label>
+                    </div>
+                </section>
+
+                <button id="submitBtn" class="btn btn-primary btn-block section-gap" type="submit">
+                    <i class="fas fa-paper-plane"></i> Submit application
+                </button>
+            </form>
+        </section>
+
+        <nav class="bottom-nav" aria-label="Main navigation">
+            <a href="dashboard.html"><i class="fas fa-house"></i><span>Home</span></a>
+            <a class="active" href="apply.html"><i class="fas fa-file-signature"></i><span>Apply</span></a>
+            <a href="order.html"><i class="fas fa-receipt"></i><span>Orders</span></a>
+            <a href="repay.html"><i class="fas fa-wallet"></i><span>Repay</span></a>
+            <a href="profile.html"><i class="fas fa-user"></i><span>Me</span></a>
+        </nav>
+    </main>
+
+    <script src="config.js"></script>
+    <script src="loan-utils.js"></script>
+    <script>
+        let currentUser = null;
+        const form = document.getElementById('loanForm');
+        const submitButton = document.getElementById('submitBtn');
+        const message = document.getElementById('message');
+
+        auth.onAuthStateChanged(async user => {
+            if (!user) {
+                window.location.href = 'index.html';
+                return;
+            }
+            currentUser = user;
+            try {
+                const profileSnapshot = await db.collection('users').doc(user.uid).get();
+                if (!profileSnapshot.exists) return;
+                const profile = profileSnapshot.data();
+                document.getElementById('fullName').value = profile.fullName || user.displayName || '';
+                document.getElementById('nrcNumber').value = profile.nrcNumber || '';
+                document.getElementById('mobileMoney').value = profile.phoneNumber || '';
+            } catch (error) {
+                console.error('Profile prefill error:', error);
+            }
+        });
+
+        document.getElementById('nrcFile').addEventListener('change', event => {
+            document.getElementById('nrcFilename').textContent = event.target.files[0]?.name || 'Optional in prototype';
+        });
+        document.getElementById('payslipFile').addEventListener('change', event => {
+            document.getElementById('payslipFilename').textContent = event.target.files[0]?.name || 'Optional in prototype';
+        });
+
+        form.addEventListener('submit', async event => {
+            event.preventDefault();
+            message.textContent = '';
+            if (!currentUser) return;
+
+            if (!form.reportValidity()) return;
+
+            const fullName = document.getElementById('fullName').value.trim();
+            const dob = document.getElementById('dob').value;
+            const nrcNumber = document.getElementById('nrcNumber').value.trim();
+            const mobileMoney = document.getElementById('mobileMoney').value.trim();
+            const amount = Number(document.getElementById('amount').value);
+            const termMonths = Number(document.getElementById('termMonths').value);
+            const purpose = document.getElementById('purpose').value.trim();
+
+            if (amount < 50) {
+                message.textContent = 'The requested amount must be at least K50.';
+                message.style.color = '#b42318';
+                return;
+            }
+
+            submitButton.disabled = true;
+            submitButton.innerHTML = '<i class="fas fa-circle-notch spin"></i> Submitting…';
+
+            try {
+                const loanRef = db.collection('loans').doc();
+                const applicationNumber = MoneyTreeLoans.applicationNumber(loanRef.id);
+                await loanRef.set({
+                    userId: currentUser.uid,
+                    applicationNumber,
+                    fullName,
+                    dateOfBirth: dob,
+                    nrcNumber,
+                    mobileMoney,
+                    amount: MoneyTreeLoans.roundMoney(amount),
+                    requestedTermMonths: termMonths,
+                    termMonths,
+                    purpose,
+                    status: 'pending',
+                    totalPaid: 0,
+                    temporaryPolicy: true,
+                    documentsUploaded: false,
+                    documentNames: {
+                        nrc: document.getElementById('nrcFile').files[0]?.name || '',
+                        payslip: document.getElementById('payslipFile').files[0]?.name || ''
+                    },
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                    createdAtISO: new Date().toISOString()
+                });
+
+                await db.collection('users').doc(currentUser.uid).set({
+                    fullName,
+                    phoneNumber: mobileMoney,
+                    nrcNumber,
+                    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                }, { merge: true });
+
+                form.innerHTML = `
+                    <div class="success-box">
+                        <strong>Application submitted</strong><br />
+                        Your application number is ${MoneyTreeLoans.escapeHtml(applicationNumber)}. The administrator will review your request and confirm the final terms.
+                    </div>
+                    <div class="action-row">
+                        <a class="btn btn-primary" href="order.html?loan=${encodeURIComponent(loanRef.id)}">Track application</a>
+                        <a class="btn btn-outline" href="dashboard.html">Back to dashboard</a>
+                    </div>
+                `;
+            } catch (error) {
+                console.error('Application error:', error);
+                message.textContent = error.message || 'The application could not be submitted.';
+                message.style.color = '#b42318';
+                submitButton.disabled = false;
+                submitButton.innerHTML = '<i class="fas fa-paper-plane"></i> Submit application';
+            }
+        });
+    </script>
+</body>
+</html>

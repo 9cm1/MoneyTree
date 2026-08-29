@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0c3b2c" />
+    <title>Money Tree — Loan Contract</title>
+    <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+</head>
+<body class="app-body">
+    <main class="app-shell">
+        <header class="topbar">
+            <a id="backLink" class="icon-button" href="order.html" aria-label="Back to order"><i class="fas fa-arrow-left"></i></a>
+            <div class="topbar-title">
+                <h1>Loan Contract</h1>
+                <p>Agreement summary</p>
+            </div>
+            <button class="icon-button no-print" type="button" onclick="window.print()" aria-label="Print contract"><i class="fas fa-print"></i></button>
+        </header>
+
+        <section class="page-content document-page">
+            <div class="draft-banner no-print">
+                <strong>Not a final legal agreement:</strong> this structure must be reviewed and replaced with the client’s approved Money Tree contract before any borrower accepts a real loan.
+            </div>
+            <div id="contractContent" class="loading-state" aria-live="polite">
+                <i class="fas fa-circle-notch spin" aria-hidden="true"></i>
+                Preparing the contract summary…
+            </div>
+        </section>
+
+        <nav class="bottom-nav no-print" aria-label="Main navigation">
+            <a href="dashboard.html"><i class="fas fa-house"></i><span>Home</span></a>
+            <a href="apply.html"><i class="fas fa-file-signature"></i><span>Apply</span></a>
+            <a class="active" href="order.html"><i class="fas fa-receipt"></i><span>Orders</span></a>
+            <a href="repay.html"><i class="fas fa-wallet"></i><span>Repay</span></a>
+            <a href="profile.html"><i class="fas fa-user"></i><span>Me</span></a>
+        </nav>
+    </main>
+
+    <script src="config.js"></script>
+    <script src="loan-utils.js"></script>
+    <script>
+        const loanId = MoneyTreeLoans.loanIdFromUrl();
+        const content = document.getElementById('contractContent');
+        if (loanId) document.getElementById('backLink').href = `order.html?loan=${encodeURIComponent(loanId)}`;
+
+        auth.onAuthStateChanged(async user => {
+            if (!user) {
+                window.location.href = 'index.html';
+                return;
+            }
+            if (!loanId) {
+                showError('Select a loan from the Order Center to view its contract.');
+                return;
+            }
+            try {
+                const snapshot = await db.collection('loans').doc(loanId).get();
+                if (!snapshot.exists || snapshot.data().userId !== user.uid) {
+                    showError('This contract is not available in your account.');
+                    return;
+                }
+                renderContract({ id: snapshot.id, ...snapshot.data() });
+            } catch (error) {
+                console.error('Contract load error:', error);
+                showError('The contract could not be loaded.');
+            }
+        });
+
+        function renderContract(loan) {
+            const summary = MoneyTreeLoans.loanSummary(loan);
+            const borrower = MoneyTreeLoans.escapeHtml(loan.fullName || 'Money Tree customer');
+            const number = MoneyTreeLoans.escapeHtml(loan.applicationNumber || `MT-${loan.id.slice(0, 8).toUpperCase()}`);
+
+            content.className = 'document';
+            content.innerHTML = `
+                <header class="document-header" style="text-align:center;">
+                    <span class="eyebrow">Money Tree</span>
+                    <h2>${borrower}</h2>
+                    <p>Application ${number}</p>
+                </header>
+
+                <section class="document-section">
+                    <h3>Loan summary</h3>
+                    <div class="document-grid">
+                        <div class="detail-row"><span>Approved loan amount</span><strong>${MoneyTreeLoans.money(summary.principal)}</strong></div>
+                        <div class="detail-row"><span>Amount disbursed</span><strong>${MoneyTreeLoans.money(summary.disbursedAmount)}</strong></div>
+                        <div class="detail-row"><span>Repayment period</span><strong>${summary.termMonths} months</strong></div>
+                        <div class="detail-row"><span>Payment frequency</span><strong>${MoneyTreeLoans.escapeHtml(summary.paymentFrequency)}</strong></div>
+                        <div class="detail-row"><span>First payment</span><strong>${MoneyTreeLoans.formatDate(loan.firstPaymentDate)}</strong></div>
+                        <div class="detail-row"><span>Total repayment</span><strong>${MoneyTreeLoans.money(summary.totalRepay)}</strong></div>
+                        <div class="detail-row"><span>Repayment method</span><strong>${MoneyTreeLoans.escapeHtml(summary.repaymentMethod)}</strong></div>
+                    </div>
+                </section>
+
+                <section class="document-section">
+                    <h3>Party details</h3>
+                    <p><strong>Lender:</strong> Money Tree — [client to provide registered legal entity]</p>
+                    <p><strong>Borrower:</strong> ${borrower}</p>
+                    <p><strong>NRC:</strong> ${MoneyTreeLoans.escapeHtml(MoneyTreeLoans.maskNrc(loan.nrcNumber))}</p>
+                    <p><strong>Mobile number:</strong> ${MoneyTreeLoans.escapeHtml(loan.mobileMoney || 'Not provided')}</p>
+                </section>
+
+                <section class="document-section">
+                    <h3>Client instructions and information</h3>
+                    <ol>
+                        <li>Repayments are due according to the schedule attached to this agreement.</li>
+                        <li>Contact Money Tree promptly if a scheduled payment may be missed.</li>
+                        <li>Any late fees, default interest, rescheduling conditions or early-settlement rules must match the final approved Key Facts Statement.</li>
+                    </ol>
+                </section>
+
+                <section class="document-section">
+                    <h3>Permissions</h3>
+                    <p>The borrower permissions required for identity, employment, affordability and credit checks must be listed here in clear language. Each permission must be lawful, necessary and separately approved by the client’s qualified reviewer before launch.</p>
+                    <ul>
+                        <li>[Client to provide approved employment-verification permission.]</li>
+                        <li>[Client to provide approved credit-reference-bureau permission.]</li>
+                        <li>[Client to provide approved repayment and collection authority.]</li>
+                        <li>[Client to provide approved privacy and data-retention notice.]</li>
+                    </ul>
+                </section>
+
+                <section class="document-section">
+                    <h3>Declaration</h3>
+                    <p>I, <strong>${borrower}</strong>, confirm that the final loan terms, Key Facts Statement, repayment schedule and applicable permissions were made available for review before acceptance.</p>
+                    <p style="margin-top:24px;"><strong>Digital acceptance:</strong> [Not enabled in this prototype]</p>
+                </section>
+            `;
+        }
+
+        function showError(text) {
+            content.className = 'error-box';
+            content.textContent = text;
+        }
+    </script>
+</body>
+</html>

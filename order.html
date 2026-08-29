@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0c3b2c" />
+    <title>Money Tree — Order Center</title>
+    <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+</head>
+<body class="app-body">
+    <main class="app-shell">
+        <header class="topbar">
+            <a class="icon-button" href="dashboard.html" aria-label="Back to dashboard"><i class="fas fa-arrow-left"></i></a>
+            <div class="topbar-title">
+                <h1>Order Center</h1>
+                <p>Track each loan from application to repayment</p>
+            </div>
+            <a class="icon-button" href="user-care.html" aria-label="Contact us"><i class="far fa-message"></i></a>
+        </header>
+
+        <section class="page-content">
+            <div id="orderContent" class="loading-state" aria-live="polite">
+                <i class="fas fa-circle-notch spin" aria-hidden="true"></i>
+                Loading your loan information…
+            </div>
+        </section>
+
+        <nav class="bottom-nav" aria-label="Main navigation">
+            <a href="dashboard.html"><i class="fas fa-house"></i><span>Home</span></a>
+            <a href="apply.html"><i class="fas fa-file-signature"></i><span>Apply</span></a>
+            <a class="active" href="order.html"><i class="fas fa-receipt"></i><span>Orders</span></a>
+            <a href="repay.html"><i class="fas fa-wallet"></i><span>Repay</span></a>
+            <a href="profile.html"><i class="fas fa-user"></i><span>Me</span></a>
+        </nav>
+    </main>
+
+    <script src="config.js"></script>
+    <script src="loan-utils.js"></script>
+    <script>
+        let unsubscribe = null;
+        const requestedLoanId = MoneyTreeLoans.loanIdFromUrl();
+        const content = document.getElementById('orderContent');
+
+        auth.onAuthStateChanged(user => {
+            if (!user) {
+                window.location.href = 'index.html';
+                return;
+            }
+
+            if (unsubscribe) unsubscribe();
+            if (requestedLoanId) {
+                unsubscribe = db.collection('loans').doc(requestedLoanId).onSnapshot(snapshot => {
+                    if (!snapshot.exists || snapshot.data().userId !== user.uid) {
+                        showError('This loan could not be found in your account.');
+                        return;
+                    }
+                    renderDetail({ id: snapshot.id, ...snapshot.data() });
+                }, () => showError('The loan details could not be loaded.'));
+            } else {
+                unsubscribe = db.collection('loans').where('userId', '==', user.uid).onSnapshot(snapshot => {
+                    const loans = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    loans.sort((a, b) => {
+                        const left = MoneyTreeLoans.toDate(a.createdAt) || MoneyTreeLoans.toDate(a.createdAtISO) || new Date(0);
+                        const right = MoneyTreeLoans.toDate(b.createdAt) || MoneyTreeLoans.toDate(b.createdAtISO) || new Date(0);
+                        return right - left;
+                    });
+                    renderList(loans);
+                }, () => showError('Your loan orders could not be loaded.'));
+            }
+        });
+
+        function renderList(loans) {
+            if (!loans.length) {
+                content.className = 'empty-state';
+                content.innerHTML = `
+                    <i class="fas fa-receipt" aria-hidden="true"></i>
+                    <h3>No loan orders yet</h3>
+                    <p>Your applications and active loans will appear here.</p>
+                    <a class="btn btn-primary" href="apply.html">Apply now</a>
+                `;
+                return;
+            }
+
+            content.className = '';
+            content.innerHTML = `
+                <div class="page-intro">
+                    <div>
+                        <span class="eyebrow">All loan orders</span>
+                        <h2>Select a loan</h2>
+                        <p>Open any record to see its balance, documents and repayment schedule.</p>
+                    </div>
+                </div>
+                ${loans.map(loan => {
+                    const summary = MoneyTreeLoans.loanSummary(loan);
+                    return `
+                        <article class="loan-card">
+                            <div class="loan-card-top">
+                                <div>
+                                    <div class="loan-number">${MoneyTreeLoans.escapeHtml(loan.applicationNumber || `MT-${loan.id.slice(0, 8).toUpperCase()}`)}</div>
+                                    <div class="loan-amount">${MoneyTreeLoans.money(summary.principal)}</div>
+                                    <div class="loan-meta">${MoneyTreeLoans.formatDate(loan.createdAt || loan.createdAtISO)}</div>
+                                </div>
+                                <span class="status-badge status-${MoneyTreeLoans.escapeHtml(loan.status || 'pending')}">${MoneyTreeLoans.statusLabel(loan.status)}</span>
+                            </div>
+                            <div class="action-row">
+                                <a class="btn btn-secondary btn-small" href="order.html?loan=${encodeURIComponent(loan.id)}">Open order</a>
+                            </div>
+                        </article>
+                    `;
+                }).join('')}
+            `;
+        }
+
+        function renderDetail(loan) {
+            const summary = MoneyTreeLoans.loanSummary(loan);
+            const installments = (loan.installments || []).map(MoneyTreeLoans.installmentView);
+            const paidTerms = installments.filter(item => item.status === 'paid').length;
+            const startDate = loan.loanStartDate || loan.disbursedAt || loan.approvedAt;
+            const endDate = loan.loanEndDate || loan.dueDate;
+            const progress = summary.totalRepay > 0 ? Math.min(100, (summary.totalPaid / summary.totalRepay) * 100) : 0;
+            const number = MoneyTreeLoans.escapeHtml(loan.applicationNumber || `MT-${loan.id.slice(0, 8).toUpperCase()}`);
+
+            content.className = '';
+            content.innerHTML = `
+                ${loan.temporaryPolicy ? '<div class="draft-banner"><strong>Temporary figures:</strong> the administrator must replace the test rate and legal wording with the client’s approved policy before launch.</div>' : ''}
+                <article class="card">
+                    <div class="card-header">
+                        <div>
+                            <div class="loan-number">${number}</div>
+                            <p class="card-subtitle">Created ${MoneyTreeLoans.formatDate(loan.createdAt || loan.createdAtISO)}</p>
+                        </div>
+                        <span class="status-badge status-${MoneyTreeLoans.escapeHtml(loan.status || 'pending')}">${MoneyTreeLoans.statusLabel(loan.status)}</span>
+                    </div>
+
+                    <div class="detail-list">
+                        <div class="detail-row"><span>Actual loan period</span><strong>${MoneyTreeLoans.formatDate(startDate)} – ${MoneyTreeLoans.formatDate(endDate)}</strong></div>
+                        <div class="detail-row"><span>Approved loan amount</span><strong>${MoneyTreeLoans.money(summary.principal)}</strong></div>
+                        <div class="detail-row"><span>Amount received</span><strong>${MoneyTreeLoans.money(summary.disbursedAmount)}</strong></div>
+                        <div class="detail-row"><span>Plan total repayment</span><strong>${MoneyTreeLoans.money(summary.totalRepay)}</strong></div>
+                        <div class="detail-row"><span>Total paid</span><strong>${MoneyTreeLoans.money(summary.totalPaid)}</strong></div>
+                        <div class="detail-row"><span>Remaining balance</span><strong>${MoneyTreeLoans.money(summary.remainingBalance)}</strong></div>
+                        <div class="detail-row"><span>Loan terms</span><strong>${paidTerms}/${installments.length || summary.termMonths}</strong></div>
+                    </div>
+
+                    <div class="progress-track" aria-label="Repayment progress">
+                        <div class="progress-fill" style="width:${progress.toFixed(1)}%"></div>
+                    </div>
+                </article>
+
+                <div class="link-list section-gap">
+                    <a href="key-facts.html?loan=${encodeURIComponent(loan.id)}"><span><i class="fas fa-file-circle-check"></i> Key Facts Statement</span><i class="fas fa-chevron-right"></i></a>
+                    <a href="loan-contract.html?loan=${encodeURIComponent(loan.id)}"><span><i class="fas fa-file-signature"></i> Loan contract</span><i class="fas fa-chevron-right"></i></a>
+                    <a href="repayment-plan.html?loan=${encodeURIComponent(loan.id)}"><span><i class="fas fa-calendar-check"></i> Repayment plan</span><i class="fas fa-chevron-right"></i></a>
+                </div>
+            `;
+        }
+
+        function showError(text) {
+            content.className = 'error-box';
+            content.textContent = text;
+        }
+    </script>
+</body>
+</html>
