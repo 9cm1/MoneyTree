@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0c3b2c" />
+    <title>Money Tree — Loan Contract</title>
+    <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+</head>
+<body class="app-body">
+    <main class="app-shell">
+        <header class="topbar">
+            <a id="backLink" class="icon-button" href="order.html" aria-label="Back to order"><i class="fas fa-arrow-left"></i></a>
+            <div class="topbar-title">
+                <h1>Loan Contract</h1>
+                <p>Agreement summary</p>
+            </div>
+            <button class="icon-button no-print" type="button" onclick="window.print()" aria-label="Print contract"><i class="fas fa-print"></i></button>
+        </header>
+
+        <section class="page-content document-page">
+            <div class="draft-banner no-print">
+                <strong>Prototype acceptance only:</strong> this workflow records a test acceptance, but the client’s approved contract, permissions and legal review are still required before any real loan is issued.
+            </div>
+            <div id="contractContent" class="loading-state" aria-live="polite">
+                <i class="fas fa-circle-notch spin" aria-hidden="true"></i>
+                Preparing the contract summary…
+            </div>
+        </section>
+
+        <nav class="bottom-nav no-print" aria-label="Main navigation">
+            <a href="dashboard.html"><i class="fas fa-house"></i><span>Home</span></a>
+            <a href="apply.html"><i class="fas fa-file-signature"></i><span>Apply</span></a>
+            <a class="active" href="order.html"><i class="fas fa-receipt"></i><span>Orders</span></a>
+            <a href="repay.html"><i class="fas fa-wallet"></i><span>Repay</span></a>
+            <a href="profile.html"><i class="fas fa-user"></i><span>Me</span></a>
+        </nav>
+    </main>
+
+    <script src="config.js"></script>
+    <script src="loan-utils.js"></script>
+    <script>
+        const loanId = MoneyTreeLoans.loanIdFromUrl();
+        const content = document.getElementById('contractContent');
+        let currentUser = null;
+        let loanData = null;
+        let profileData = {};
+        let acceptanceData = null;
+        let viewerIsAdmin = false;
+
+        if (loanId) document.getElementById('backLink').href = `order.html?loan=${encodeURIComponent(loanId)}`;
+
+        auth.onAuthStateChanged(async user => {
+            if (!user) {
+                window.location.href = 'index.html';
+                return;
+            }
+            if (!loanId) {
+                showError('Select a loan from the Order Center to view its contract.');
+                return;
+            }
+
+            currentUser = user;
+            try {
+                const viewerSnapshot = await db.collection('users').doc(user.uid).get();
+                viewerIsAdmin = viewerSnapshot.exists && viewerSnapshot.data().role === 'admin';
+
+                const loanSnapshot = await db.collection('loans').doc(loanId).get();
+                if (!loanSnapshot.exists || (loanSnapshot.data().userId !== user.uid && !viewerIsAdmin)) {
+                    showError('This contract is not available in your account.');
+                    return;
+                }
+
+                loanData = { id: loanSnapshot.id, ...loanSnapshot.data() };
+                const [profileSnapshot, acceptanceSnapshot] = await Promise.all([
+                    db.collection('users').doc(loanData.userId).get(),
+                    db.collection('loanAcceptances').doc(loanId).get()
+                ]);
+                profileData = profileSnapshot.exists ? profileSnapshot.data() : {};
+                acceptanceData = acceptanceSnapshot.exists
+                    ? { id: acceptanceSnapshot.id, ...acceptanceSnapshot.data() }
+                    : null;
+                if (viewerIsAdmin) document.getElementById('backLink').href = 'admin.html';
+                renderContract();
+            } catch (error) {
+                console.error('Contract load error:', error);
+                showError('The contract could not be loaded.');
+            }
+        });
+
+        function renderContract() {
+            const loan = loanData;
+            const acceptedTerms = acceptanceData?.acceptedTerms || null;
+            const terms = acceptedTerms || loan.contractTerms || {};
+            const contractLoan = { ...loan, ...terms, contractTerms: terms };
+            const summary = MoneyTreeLoans.loanSummary(contractLoan);
+            const borrowerName = loan.fullName || profileData.fullName || currentUser.displayName || 'Money Tree customer';
+            const borrower = MoneyTreeLoans.escapeHtml(borrowerName);
+            const email = profileData.email || (loan.userId === currentUser.uid ? currentUser.email : '') || 'Not provided';
+            const number = MoneyTreeLoans.escapeHtml(loan.applicationNumber || `MT-${loan.id.slice(0, 8).toUpperCase()}`);
+            const canAccept = loan.status === 'approved'
+                && !acceptanceData
+                && loan.userId === currentUser.uid
+                && Boolean(loan.contractTerms && loan.termsVersion && loan.contractVersion);
+
+            let acceptanceSection = '';
+            if (acceptanceData) {
+                acceptanceSection = `
+                    <div class="acceptance-receipt">
+                        <span class="status-badge status-approved"><i class="fas fa-circle-check"></i> ${acceptanceData.prototype ? 'Prototype accepted' : 'Accepted'}</span>
+                        <h4>Digital acceptance receipt</h4>
+                        <div class="detail-list">
+                            <div class="detail-row"><span>Accepted by</span><strong>${MoneyTreeLoans.escapeHtml(acceptanceData.borrowerName)}</strong></div>
+                            <div class="detail-row"><span>Authenticated email</span><strong>${MoneyTreeLoans.escapeHtml(acceptanceData.borrowerEmail)}</strong></div>
+                            <div class="detail-row"><span>Date and time</span><strong>${MoneyTreeLoans.escapeHtml(MoneyTreeLoans.formatDateTime(acceptanceData.acceptedAt))}</strong></div>
+                            <div class="detail-row"><span>Contract version</span><strong>${MoneyTreeLoans.escapeHtml(acceptanceData.contractVersion)}</strong></div>
+                            <div class="detail-row"><span>Terms reference</span><strong>${MoneyTreeLoans.escapeHtml(acceptanceData.termsVersion)}</strong></div>
+                        </div>
+                        <p>This record is read-only and is available to the borrower and Money Tree administrators.</p>
+                    </div>
+                `;
+            } else if (canAccept) {
+                acceptanceSection = `
+                    <form id="acceptanceForm" class="acceptance-panel no-print">
+                        <div>
+                            <span class="eyebrow">Borrower action required</span>
+                            <h4>Review and accept this prototype contract</h4>
+                            <p>Open the supporting documents, read every section above, and only continue if the displayed details and proposed figures are correct.</p>
+                        </div>
+
+                        <div class="acceptance-links">
+                            <a href="key-facts.html?loan=${encodeURIComponent(loan.id)}"><i class="fas fa-file-circle-check"></i> Key Facts Statement</a>
+                            <a href="repayment-plan.html?loan=${encodeURIComponent(loan.id)}"><i class="fas fa-calendar-check"></i> Repayment plan</a>
+                        </div>
+
+                        <div class="consent-list">
+                            <label class="consent-row"><input name="keyFacts" type="checkbox" required /><span>I reviewed the Key Facts Statement and the total cost of this proposed loan.</span></label>
+                            <label class="consent-row"><input name="repaymentSchedule" type="checkbox" required /><span>I reviewed the payment dates, amounts and repayment schedule.</span></label>
+                            <label class="consent-row"><input name="contract" type="checkbox" required /><span>I read this contract and confirm that my personal details are correct.</span></label>
+                            <label class="consent-row"><input name="permissions" type="checkbox" required /><span>I reviewed the permissions section and understand that final client-approved wording is still required.</span></label>
+                            <label class="consent-row"><input name="electronicSignature" type="checkbox" required /><span>I agree to use my authenticated account and typed name as my prototype electronic acceptance.</span></label>
+                        </div>
+
+                        <div class="field signature-field">
+                            <label for="typedName">Type your full name exactly as shown: <strong>${borrower}</strong></label>
+                            <input id="typedName" autocomplete="off" placeholder="${borrower}" required />
+                        </div>
+                        <div id="acceptanceMessage" class="message-space" role="status" aria-live="polite"></div>
+                        <button id="acceptButton" class="btn btn-primary btn-block" type="submit"><i class="fas fa-signature"></i> Accept and sign prototype contract</button>
+                    </form>
+                `;
+            } else if (viewerIsAdmin && loan.status === 'approved') {
+                acceptanceSection = '<div class="notice">The borrower has not yet accepted these proposed terms. The administrator cannot accept on the borrower’s behalf.</div>';
+            } else if (loan.status === 'pending') {
+                acceptanceSection = '<div class="notice"><strong>Not ready for acceptance.</strong> The administrator must first review the application and publish the proposed loan terms.</div>';
+            } else if (loan.status === 'rejected') {
+                acceptanceSection = '<div class="error-box">This application was not approved, so there is no contract to accept.</div>';
+            } else {
+                acceptanceSection = '<div class="notice">This older loan does not have a digital acceptance record. Contact the administrator before relying on this contract as proof of acceptance.</div>';
+            }
+
+            content.className = 'document';
+            content.innerHTML = `
+                <header class="document-header" style="text-align:center;">
+                    <span class="eyebrow">Money Tree</span>
+                    <h2>${borrower}</h2>
+                    <p>Application ${number}</p>
+                </header>
+
+                <section class="document-section">
+                    <h3>Loan summary</h3>
+                    <div class="document-grid">
+                        <div class="detail-row"><span>Approved loan amount</span><strong>${MoneyTreeLoans.money(summary.principal)}</strong></div>
+                        <div class="detail-row"><span>Amount borrower will receive</span><strong>${MoneyTreeLoans.money(summary.disbursedAmount)}</strong></div>
+                        <div class="detail-row"><span>Monthly interest rate</span><strong>${(summary.monthlyInterestRate * 100).toFixed(2)}%</strong></div>
+                        <div class="detail-row"><span>Total interest and fees</span><strong>${MoneyTreeLoans.money(summary.totalCostOfCredit)}</strong></div>
+                        <div class="detail-row"><span>Repayment period</span><strong>${summary.termMonths} months</strong></div>
+                        <div class="detail-row"><span>Payment frequency</span><strong>${MoneyTreeLoans.escapeHtml(summary.paymentFrequency)}</strong></div>
+                        <div class="detail-row"><span>First payment</span><strong>${MoneyTreeLoans.formatDate(terms.firstPaymentDate || loan.firstPaymentDate)}</strong></div>
+                        <div class="detail-row"><span>Total repayment</span><strong>${MoneyTreeLoans.money(summary.totalRepay)}</strong></div>
+                        <div class="detail-row"><span>Repayment method</span><strong>${MoneyTreeLoans.escapeHtml(summary.repaymentMethod)}</strong></div>
+                    </div>
+                </section>
+
+                <section class="document-section">
+                    <h3>Party details</h3>
+                    <p><strong>Lender:</strong> Money Tree — [client to provide registered legal entity]</p>
+                    <p><strong>Borrower:</strong> ${borrower}</p>
+                    <p><strong>Date of birth:</strong> ${MoneyTreeLoans.escapeHtml(loan.dateOfBirth || 'Not provided')}</p>
+                    <p><strong>NRC:</strong> ${MoneyTreeLoans.escapeHtml(MoneyTreeLoans.maskNrc(loan.nrcNumber))}</p>
+                    <p><strong>Mobile number:</strong> ${MoneyTreeLoans.escapeHtml(loan.mobileMoney || 'Not provided')}</p>
+                    <p><strong>Authenticated email:</strong> ${MoneyTreeLoans.escapeHtml(email)}</p>
+                    <p><strong>Loan purpose:</strong> ${MoneyTreeLoans.escapeHtml(loan.purpose || 'Not provided')}</p>
+                </section>
+
+                <section class="document-section">
+                    <h3>Client instructions and information</h3>
+                    <ol>
+                        <li>Repayments are due according to the schedule attached to this agreement.</li>
+                        <li>Contact Money Tree promptly if a scheduled payment may be missed.</li>
+                        <li>Any late fees, default interest, rescheduling conditions or early-settlement rules must match the final approved Key Facts Statement.</li>
+                    </ol>
+                </section>
+
+                <section class="document-section">
+                    <h3>Permissions</h3>
+                    <p>The borrower permissions required for identity, employment, affordability and credit checks must be listed here in clear language. Each permission must be lawful, necessary and separately approved by the client’s qualified reviewer before launch.</p>
+                    <ul>
+                        <li>[Client to provide approved employment-verification permission.]</li>
+                        <li>[Client to provide approved credit-reference-bureau permission.]</li>
+                        <li>[Client to provide approved repayment and collection authority.]</li>
+                        <li>[Client to provide approved privacy and data-retention notice.]</li>
+                    </ul>
+                </section>
+
+                <section id="acceptance" class="document-section">
+                    <h3>Declaration and digital acceptance</h3>
+                    <p>I, <strong>${borrower}</strong>, confirm that the displayed loan terms, Key Facts Statement, repayment schedule and applicable permissions were made available for review before acceptance.</p>
+                    <div class="section-gap">${acceptanceSection}</div>
+                </section>
+            `;
+
+            const form = document.getElementById('acceptanceForm');
+            if (form) form.addEventListener('submit', acceptContract);
+        }
+
+        async function acceptContract(event) {
+            event.preventDefault();
+            const form = event.currentTarget;
+            const message = document.getElementById('acceptanceMessage');
+            const button = document.getElementById('acceptButton');
+            const typedName = document.getElementById('typedName').value.trim();
+            const expectedName = String(loanData.fullName || profileData.fullName || '').trim();
+
+            message.textContent = '';
+            if (!form.reportValidity()) return;
+            if (typedName !== expectedName) {
+                message.textContent = 'Type your full name exactly as displayed above.';
+                message.style.color = '#b42318';
+                return;
+            }
+
+            button.disabled = true;
+            button.innerHTML = '<i class="fas fa-circle-notch spin"></i> Recording acceptance…';
+
+            const loanRef = db.collection('loans').doc(loanId);
+            const acceptanceRef = db.collection('loanAcceptances').doc(loanId);
+
+            try {
+                await db.runTransaction(async transaction => {
+                    const latestLoanSnapshot = await transaction.get(loanRef);
+                    const existingAcceptance = await transaction.get(acceptanceRef);
+                    if (!latestLoanSnapshot.exists) throw new Error('The loan could not be found.');
+                    if (existingAcceptance.exists) throw new Error('This contract has already been accepted.');
+
+                    const latestLoan = latestLoanSnapshot.data();
+                    if (latestLoan.userId !== currentUser.uid) throw new Error('This contract does not belong to your account.');
+                    if (latestLoan.status !== 'approved') throw new Error('This loan is not awaiting acceptance.');
+                    if (!latestLoan.contractTerms || !latestLoan.termsVersion || !latestLoan.contractVersion) {
+                        throw new Error('The administrator has not completed the proposed contract terms.');
+                    }
+                    if (latestLoan.termsVersion !== loanData.termsVersion) {
+                        throw new Error('The proposed terms changed. Reload and review the updated contract.');
+                    }
+
+                    transaction.set(acceptanceRef, {
+                        loanId,
+                        userId: currentUser.uid,
+                        applicationNumber: latestLoan.applicationNumber,
+                        borrowerName: expectedName,
+                        borrowerEmail: currentUser.email || '',
+                        contractVersion: latestLoan.contractVersion,
+                        termsVersion: latestLoan.termsVersion,
+                        acceptedTerms: latestLoan.contractTerms,
+                        confirmations: {
+                            keyFacts: true,
+                            repaymentSchedule: true,
+                            contract: true,
+                            permissions: true,
+                            electronicSignature: true
+                        },
+                        prototype: latestLoan.temporaryPolicy === true,
+                        acceptedAt: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                });
+
+                const acceptanceSnapshot = await acceptanceRef.get();
+                acceptanceData = { id: acceptanceSnapshot.id, ...acceptanceSnapshot.data() };
+                renderContract();
+                document.getElementById('acceptance')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            } catch (error) {
+                console.error('Contract acceptance error:', error);
+                message.textContent = error.message || 'The contract acceptance could not be recorded.';
+                message.style.color = '#b42318';
+                button.disabled = false;
+                button.innerHTML = '<i class="fas fa-signature"></i> Accept and sign prototype contract';
+            }
+        }
+
+        function showError(text) {
+            content.className = 'error-box';
+            content.textContent = text;
+        }
+    </script>
+</body>
+</html>

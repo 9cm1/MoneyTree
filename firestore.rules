@@ -1,0 +1,186 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return signedIn()
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    function ownsLoan(loanId) {
+      return signedIn()
+        && get(/databases/$(database)/documents/loans/$(loanId)).data.userId == request.auth.uid;
+    }
+
+    function hasAcceptance(loanId) {
+      return exists(/databases/$(database)/documents/loanAcceptances/$(loanId));
+    }
+
+    function loanStatusTransitionAllowed(loanId) {
+      return request.resource.data.status == resource.data.status
+        || (resource.data.status == 'pending'
+          && request.resource.data.status in ['approved', 'rejected'])
+        || (resource.data.status == 'approved'
+          && request.resource.data.status == 'active'
+          && hasAcceptance(loanId))
+        || (resource.data.status in ['active', 'disbursed']
+          && request.resource.data.status in ['active', 'repaid']);
+    }
+
+    function acceptedIdentityAndTermsUnchanged() {
+      return request.resource.data.userId == resource.data.userId
+        && request.resource.data.applicationNumber == resource.data.applicationNumber
+        && request.resource.data.fullName == resource.data.fullName
+        && request.resource.data.dateOfBirth == resource.data.dateOfBirth
+        && request.resource.data.nrcNumber == resource.data.nrcNumber
+        && request.resource.data.mobileMoney == resource.data.mobileMoney
+        && request.resource.data.purpose == resource.data.purpose
+        && request.resource.data.approvedAmount == resource.data.approvedAmount
+        && request.resource.data.amountToReceive == resource.data.amountToReceive
+        && request.resource.data.termMonths == resource.data.termMonths
+        && request.resource.data.monthlyInterestRate == resource.data.monthlyInterestRate
+        && request.resource.data.annualPercentageRate == resource.data.annualPercentageRate
+        && request.resource.data.arrangementFee == resource.data.arrangementFee
+        && request.resource.data.monthlyAdminFee == resource.data.monthlyAdminFee
+        && request.resource.data.totalInterest == resource.data.totalInterest
+        && request.resource.data.totalFees == resource.data.totalFees
+        && request.resource.data.totalCostOfCredit == resource.data.totalCostOfCredit
+        && request.resource.data.totalRepay == resource.data.totalRepay
+        && request.resource.data.installmentAmount == resource.data.installmentAmount
+        && request.resource.data.repaymentMethod == resource.data.repaymentMethod
+        && request.resource.data.paymentFrequency == resource.data.paymentFrequency
+        && request.resource.data.firstPaymentDate == resource.data.firstPaymentDate
+        && request.resource.data.loanEndDate == resource.data.loanEndDate
+        && request.resource.data.contractVersion == resource.data.contractVersion
+        && request.resource.data.termsVersion == resource.data.termsVersion
+        && request.resource.data.contractTerms == resource.data.contractTerms
+        && request.resource.data.temporaryPolicy == resource.data.temporaryPolicy;
+    }
+
+    match /users/{userId} {
+      allow read: if signedIn() && (request.auth.uid == userId || isAdmin());
+
+      allow create: if signedIn()
+        && request.auth.uid == userId
+        && request.resource.data.role == 'user'
+        && request.resource.data.kycStatus == 'pending';
+
+      allow update: if isAdmin()
+        || (signedIn()
+          && request.auth.uid == userId
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'fullName',
+            'phoneNumber',
+            'nrcNumber',
+            'photoURL',
+            'updatedAt'
+          ]));
+
+      allow delete: if false;
+    }
+
+    match /loans/{loanId} {
+      allow read: if signedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+
+      allow create: if signedIn()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.status == 'pending'
+        && request.resource.data.amount > 0
+        && request.resource.data.totalPaid == 0
+        && request.resource.data.keys().hasOnly([
+          'userId',
+          'applicationNumber',
+          'fullName',
+          'dateOfBirth',
+          'nrcNumber',
+          'mobileMoney',
+          'amount',
+          'requestedTermMonths',
+          'termMonths',
+          'purpose',
+          'status',
+          'totalPaid',
+          'temporaryPolicy',
+          'documentsUploaded',
+          'documentNames',
+          'createdAt',
+          'createdAtISO'
+        ]);
+
+      allow update: if isAdmin()
+        && loanStatusTransitionAllowed(loanId)
+        && (!hasAcceptance(loanId) || acceptedIdentityAndTermsUnchanged())
+        && (!(resource.data.status == 'approved' && request.resource.data.status == 'active')
+          || request.resource.data.disbursedAmount == resource.data.amountToReceive);
+      allow delete: if false;
+
+      match /payments/{paymentId} {
+        allow read: if isAdmin() || ownsLoan(loanId);
+        allow create, update: if isAdmin();
+        allow delete: if false;
+      }
+    }
+
+    match /loanAcceptances/{loanId} {
+      allow read: if signedIn()
+        && (isAdmin()
+          || get(/databases/$(database)/documents/loans/$(loanId)).data.userId == request.auth.uid);
+
+      allow create: if signedIn()
+        && !exists(/databases/$(database)/documents/loanAcceptances/$(loanId))
+        && get(/databases/$(database)/documents/loans/$(loanId)).data.userId == request.auth.uid
+        && get(/databases/$(database)/documents/loans/$(loanId)).data.status == 'approved'
+        && request.resource.data.keys().hasOnly([
+          'loanId',
+          'userId',
+          'applicationNumber',
+          'borrowerName',
+          'borrowerEmail',
+          'contractVersion',
+          'termsVersion',
+          'acceptedTerms',
+          'confirmations',
+          'prototype',
+          'acceptedAt'
+        ])
+        && request.resource.data.loanId == loanId
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.applicationNumber
+          == get(/databases/$(database)/documents/loans/$(loanId)).data.applicationNumber
+        && request.resource.data.borrowerName
+          == get(/databases/$(database)/documents/loans/$(loanId)).data.fullName
+        && request.resource.data.borrowerEmail == request.auth.token.email
+        && request.resource.data.contractVersion
+          == get(/databases/$(database)/documents/loans/$(loanId)).data.contractVersion
+        && request.resource.data.termsVersion
+          == get(/databases/$(database)/documents/loans/$(loanId)).data.termsVersion
+        && request.resource.data.acceptedTerms
+          == get(/databases/$(database)/documents/loans/$(loanId)).data.contractTerms
+        && request.resource.data.prototype
+          == get(/databases/$(database)/documents/loans/$(loanId)).data.temporaryPolicy
+        && request.resource.data.confirmations.keys().hasOnly([
+          'keyFacts',
+          'repaymentSchedule',
+          'contract',
+          'permissions',
+          'electronicSignature'
+        ])
+        && request.resource.data.confirmations.keyFacts == true
+        && request.resource.data.confirmations.repaymentSchedule == true
+        && request.resource.data.confirmations.contract == true
+        && request.resource.data.confirmations.permissions == true
+        && request.resource.data.confirmations.electronicSignature == true
+        && request.resource.data.acceptedAt == request.time;
+
+      allow update, delete: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

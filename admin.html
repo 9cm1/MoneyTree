@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0c3b2c" />
+    <title>Money Tree — Admin</title>
+    <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+</head>
+<body class="app-body">
+    <main class="app-shell wide">
+        <header class="topbar">
+            <div class="brand-lockup">
+                <div class="brand-mark" aria-hidden="true"><i class="fas fa-shield-halved"></i></div>
+                <div class="topbar-title">
+                    <h1>Money Tree Admin</h1>
+                    <p>Loan review and payment control</p>
+                </div>
+            </div>
+            <div class="action-row" style="margin:0;flex-wrap:nowrap;">
+                <a class="icon-button" href="dashboard.html" aria-label="Borrower dashboard"><i class="fas fa-house"></i></a>
+                <button id="logoutButton" class="icon-button" type="button" aria-label="Sign out"><i class="fas fa-arrow-right-from-bracket"></i></button>
+            </div>
+        </header>
+
+        <section class="page-content">
+            <div class="draft-banner">
+                <strong>Test policy active:</strong> approval forms default to 2% monthly interest and zero fees. Replace these values with the client’s approved lending policy before processing real loans.
+            </div>
+
+            <div id="adminMessage" class="message-space" role="status" aria-live="polite"></div>
+
+            <div class="admin-stats">
+                <div class="admin-stat"><strong id="statPending">0</strong><span>Pending review</span></div>
+                <div class="admin-stat"><strong id="statApproved">0</strong><span>Approved</span></div>
+                <div class="admin-stat"><strong id="statActive">0</strong><span>Active loans</span></div>
+                <div class="admin-stat"><strong id="statTotal">0</strong><span>Total records</span></div>
+            </div>
+
+            <input id="searchInput" class="search-input" type="search" placeholder="Search name, NRC, phone, email or application number" aria-label="Search loans" />
+
+            <div class="tabs" role="tablist" aria-label="Loan status filters">
+                <button class="active" type="button" data-tab="pending">Pending</button>
+                <button type="button" data-tab="approved">Approved</button>
+                <button type="button" data-tab="active">Active</button>
+                <button type="button" data-tab="rejected">Rejected</button>
+                <button type="button" data-tab="repaid">Repaid</button>
+                <button type="button" data-tab="all">All</button>
+            </div>
+
+            <div id="loanList" class="loading-state">
+                <i class="fas fa-circle-notch spin" aria-hidden="true"></i>
+                Loading loan applications…
+            </div>
+        </section>
+    </main>
+
+    <dialog id="approveDialog">
+        <div class="dialog-header">
+            <h2>Approve loan and set terms</h2>
+            <button class="dialog-close" type="button" data-close="approveDialog" aria-label="Close"><i class="fas fa-xmark"></i></button>
+        </div>
+        <form id="approveForm" class="dialog-body">
+            <input id="approveLoanId" type="hidden" />
+            <div class="notice">These fields control the borrower’s Key Facts Statement and repayment totals.</div>
+            <div class="form-grid section-gap">
+                <div class="field">
+                    <label for="approvedAmount">Approved amount (ZMW)</label>
+                    <input id="approvedAmount" type="number" min="1" step="0.01" required />
+                </div>
+                <div class="field">
+                    <label for="amountToReceive">Amount borrower will receive (ZMW)</label>
+                    <input id="amountToReceive" type="number" min="0.01" step="0.01" required />
+                </div>
+                <div class="field">
+                    <label for="approvedTerm">Term (months)</label>
+                    <input id="approvedTerm" type="number" min="1" max="60" step="1" required />
+                </div>
+                <div class="field">
+                    <label for="monthlyRate">Monthly interest rate (%)</label>
+                    <input id="monthlyRate" type="number" min="0" max="100" step="0.01" required />
+                </div>
+                <div class="field">
+                    <label for="arrangementFee">Arrangement fee (ZMW)</label>
+                    <input id="arrangementFee" type="number" min="0" step="0.01" required />
+                </div>
+                <div class="field">
+                    <label for="monthlyAdminFee">Monthly admin fee (ZMW)</label>
+                    <input id="monthlyAdminFee" type="number" min="0" step="0.01" required />
+                </div>
+                <div class="field">
+                    <label for="repaymentMethod">Repayment method</label>
+                    <select id="repaymentMethod" required>
+                        <option>Manual payment</option>
+                        <option>Mobile money</option>
+                        <option>Payroll deduction</option>
+                        <option>Bank transfer</option>
+                    </select>
+                </div>
+                <div class="field">
+                    <label for="approvedFirstPaymentDate">First payment date</label>
+                    <input id="approvedFirstPaymentDate" type="date" required />
+                </div>
+            </div>
+            <div class="action-row">
+                <button class="btn btn-primary" type="submit">Approve and save terms</button>
+                <button class="btn btn-outline" type="button" data-close="approveDialog">Cancel</button>
+            </div>
+        </form>
+    </dialog>
+
+    <dialog id="disburseDialog">
+        <div class="dialog-header">
+            <h2>Confirm disbursement</h2>
+            <button class="dialog-close" type="button" data-close="disburseDialog" aria-label="Close"><i class="fas fa-xmark"></i></button>
+        </div>
+        <form id="disburseForm" class="dialog-body">
+            <input id="disburseLoanId" type="hidden" />
+            <div class="field">
+                <label for="disbursedAmount">Amount actually received (ZMW)</label>
+                <input id="disbursedAmount" type="number" min="0" step="0.01" readonly required />
+                <small>This amount was included in the borrower’s accepted terms and cannot be changed here.</small>
+            </div>
+            <div class="field">
+                <label for="firstPaymentDate">First payment date</label>
+                <input id="firstPaymentDate" type="date" readonly required />
+            </div>
+            <div class="action-row">
+                <button class="btn btn-primary" type="submit">Confirm disbursement</button>
+                <button class="btn btn-outline" type="button" data-close="disburseDialog">Cancel</button>
+            </div>
+        </form>
+    </dialog>
+
+    <dialog id="paymentDialog">
+        <div class="dialog-header">
+            <h2>Record payment</h2>
+            <button class="dialog-close" type="button" data-close="paymentDialog" aria-label="Close"><i class="fas fa-xmark"></i></button>
+        </div>
+        <form id="paymentForm" class="dialog-body">
+            <input id="paymentLoanId" type="hidden" />
+            <div class="field">
+                <label for="paymentAmount">Payment amount (ZMW)</label>
+                <input id="paymentAmount" type="number" min="0.01" step="0.01" required />
+            </div>
+            <div class="field">
+                <label for="paymentDate">Payment date</label>
+                <input id="paymentDate" type="date" required />
+            </div>
+            <div class="field">
+                <label for="paymentReference">Transaction reference</label>
+                <input id="paymentReference" maxlength="80" placeholder="Mobile-money, payroll or bank reference" required />
+            </div>
+            <div class="action-row">
+                <button class="btn btn-primary" type="submit">Record payment</button>
+                <button class="btn btn-outline" type="button" data-close="paymentDialog">Cancel</button>
+            </div>
+        </form>
+    </dialog>
+
+    <script src="config.js"></script>
+    <script src="loan-utils.js"></script>
+    <script>
+        let currentAdmin = null;
+        let allLoans = [];
+        let allUsers = {};
+        let allAcceptances = {};
+        let activeTab = 'pending';
+        let loansReady = false;
+        let usersReady = false;
+        let acceptancesReady = false;
+
+        auth.onAuthStateChanged(async user => {
+            if (!user) {
+                window.location.href = 'index.html';
+                return;
+            }
+            try {
+                const userSnapshot = await db.collection('users').doc(user.uid).get();
+                if (!userSnapshot.exists || userSnapshot.data().role !== 'admin') {
+                    window.location.href = 'dashboard.html';
+                    return;
+                }
+                currentAdmin = user;
+                startListeners();
+            } catch (error) {
+                console.error('Admin check error:', error);
+                window.location.href = 'dashboard.html';
+            }
+        });
+
+        function startListeners() {
+            db.collection('loans').onSnapshot(snapshot => {
+                allLoans = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                allLoans.sort((a, b) => {
+                    const left = MoneyTreeLoans.toDate(a.createdAt) || MoneyTreeLoans.toDate(a.createdAtISO) || new Date(0);
+                    const right = MoneyTreeLoans.toDate(b.createdAt) || MoneyTreeLoans.toDate(b.createdAtISO) || new Date(0);
+                    return right - left;
+                });
+                loansReady = true;
+                render();
+            }, error => showMessage(error.message || 'Loan records could not be loaded.', true));
+
+            db.collection('users').onSnapshot(snapshot => {
+                allUsers = {};
+                snapshot.forEach(doc => { allUsers[doc.id] = doc.data(); });
+                usersReady = true;
+                render();
+            }, error => showMessage(error.message || 'Customer profiles could not be loaded.', true));
+
+            db.collection('loanAcceptances').onSnapshot(snapshot => {
+                allAcceptances = {};
+                snapshot.forEach(doc => { allAcceptances[doc.id] = { id: doc.id, ...doc.data() }; });
+                acceptancesReady = true;
+                render();
+            }, error => showMessage(error.message || 'Contract acceptances could not be loaded.', true));
+        }
+
+        function render() {
+            if (!loansReady || !usersReady || !acceptancesReady) return;
+            document.getElementById('statPending').textContent = allLoans.filter(loan => loan.status === 'pending').length;
+            document.getElementById('statApproved').textContent = allLoans.filter(loan => loan.status === 'approved').length;
+            document.getElementById('statActive').textContent = allLoans.filter(loan => ['active', 'disbursed'].includes(loan.status)).length;
+            document.getElementById('statTotal').textContent = allLoans.length;
+
+            const query = document.getElementById('searchInput').value.trim().toLowerCase();
+            const filtered = allLoans.filter(loan => {
+                const user = allUsers[loan.userId] || {};
+                const haystack = [
+                    loan.applicationNumber,
+                    loan.fullName,
+                    loan.nrcNumber,
+                    loan.mobileMoney,
+                    loan.purpose,
+                    user.fullName,
+                    user.email,
+                    user.phoneNumber,
+                    user.nrcNumber
+                ].join(' ').toLowerCase();
+                const statusMatch = activeTab === 'all'
+                    || (activeTab === 'active' && ['active', 'disbursed'].includes(loan.status))
+                    || loan.status === activeTab;
+                return statusMatch && haystack.includes(query);
+            });
+
+            const list = document.getElementById('loanList');
+            if (!filtered.length) {
+                list.className = 'empty-state';
+                list.innerHTML = '<i class="fas fa-inbox" aria-hidden="true"></i><h3>No matching loans</h3><p>Try another status or search term.</p>';
+                return;
+            }
+
+            list.className = '';
+            list.innerHTML = filtered.map(renderLoanCard).join('');
+        }
+
+        function renderLoanCard(loan) {
+            const user = allUsers[loan.userId] || {};
+            const acceptance = allAcceptances[loan.id] || null;
+            const summary = MoneyTreeLoans.loanSummary(loan);
+            const name = loan.fullName || user.fullName || 'Unknown customer';
+            const phone = loan.mobileMoney || user.phoneNumber || 'Not provided';
+            const nrc = loan.nrcNumber || user.nrcNumber || 'Not provided';
+            const email = user.email || 'Not provided';
+            const applicationNumber = loan.applicationNumber || `MT-${loan.id.slice(0, 8).toUpperCase()}`;
+            const safeId = MoneyTreeLoans.escapeHtml(loan.id);
+
+            let actions = '';
+            if (loan.status === 'pending') {
+                actions += `<button class="btn btn-primary btn-small" type="button" data-action="approve" data-id="${safeId}"><i class="fas fa-check"></i> Approve</button>`;
+                actions += `<button class="btn btn-danger btn-small" type="button" data-action="reject" data-id="${safeId}"><i class="fas fa-xmark"></i> Reject</button>`;
+            }
+            if (loan.status === 'approved' && !acceptance) {
+                actions += `<button class="btn btn-outline btn-small" type="button" data-action="approve" data-id="${safeId}"><i class="fas fa-pen"></i> Edit proposed terms</button>`;
+            }
+            if (loan.status === 'approved' && acceptance) {
+                actions += `<button class="btn btn-primary btn-small" type="button" data-action="disburse" data-id="${safeId}"><i class="fas fa-money-bill-transfer"></i> Mark disbursed</button>`;
+            }
+            if (acceptance) {
+                actions += `<a class="btn btn-outline btn-small" href="loan-contract.html?loan=${encodeURIComponent(loan.id)}"><i class="fas fa-file-signature"></i> View accepted contract</a>`;
+            }
+            if (['active', 'disbursed'].includes(loan.status)) {
+                actions += `<button class="btn btn-primary btn-small" type="button" data-action="payment" data-id="${safeId}"><i class="fas fa-plus"></i> Record payment</button>`;
+            }
+            if (user.kycStatus !== 'verified') {
+                actions += `<button class="btn btn-outline btn-small" type="button" data-action="verify" data-user="${MoneyTreeLoans.escapeHtml(loan.userId)}"><i class="fas fa-user-check"></i> Verify KYC</button>`;
+            }
+
+            return `
+                <article class="admin-loan-card">
+                    <div class="admin-loan-head">
+                        <div>
+                            <div class="loan-number">${MoneyTreeLoans.escapeHtml(applicationNumber)}</div>
+                            <h3>${MoneyTreeLoans.escapeHtml(name)}</h3>
+                            <p class="card-subtitle">${MoneyTreeLoans.escapeHtml(loan.purpose || 'No purpose supplied')}</p>
+                        </div>
+                        <span class="status-badge status-${MoneyTreeLoans.escapeHtml(loan.status || 'pending')}">${MoneyTreeLoans.statusLabel(loan.status)}</span>
+                    </div>
+
+                    <div class="admin-meta">
+                        <div><span>Requested</span><strong>${MoneyTreeLoans.money(loan.amount)}</strong></div>
+                        <div><span>Approved</span><strong>${MoneyTreeLoans.money(summary.principal)}</strong></div>
+                        <div><span>Remaining</span><strong>${MoneyTreeLoans.money(summary.remainingBalance)}</strong></div>
+                        <div><span>Phone</span><strong>${MoneyTreeLoans.escapeHtml(phone)}</strong></div>
+                        <div><span>NRC</span><strong>${MoneyTreeLoans.escapeHtml(nrc)}</strong></div>
+                        <div><span>Email</span><strong>${MoneyTreeLoans.escapeHtml(email)}</strong></div>
+                    </div>
+
+                    ${loan.status === 'approved' && !acceptance ? `
+                        <div class="notice section-gap">
+                            <strong>Awaiting borrower acceptance.</strong> Disbursement remains locked until the borrower reviews and accepts the proposed contract.
+                        </div>
+                    ` : ''}
+
+                    ${acceptance ? `
+                        <div class="success-box section-gap">
+                            <strong>${acceptance.prototype ? 'Prototype contract accepted' : 'Contract accepted'}</strong><br />
+                            ${MoneyTreeLoans.escapeHtml(acceptance.borrowerName || name)} accepted version
+                            ${MoneyTreeLoans.escapeHtml(acceptance.contractVersion || 'Not recorded')} on
+                            ${MoneyTreeLoans.escapeHtml(MoneyTreeLoans.formatDateTime(acceptance.acceptedAt))}.
+                        </div>
+                    ` : ''}
+
+                    ${loan.status === 'rejected' && loan.rejectionReason ? `<div class="error-box section-gap"><strong>Reason:</strong> ${MoneyTreeLoans.escapeHtml(loan.rejectionReason)}</div>` : ''}
+
+                    <div class="action-row">
+                        ${actions}
+                    </div>
+                </article>
+            `;
+        }
+
+        document.getElementById('searchInput').addEventListener('input', render);
+        document.querySelectorAll('.tabs button').forEach(button => {
+            button.addEventListener('click', () => {
+                document.querySelectorAll('.tabs button').forEach(item => item.classList.remove('active'));
+                button.classList.add('active');
+                activeTab = button.dataset.tab;
+                render();
+            });
+        });
+
+        document.getElementById('loanList').addEventListener('click', event => {
+            const button = event.target.closest('button[data-action]');
+            if (!button) return;
+            const action = button.dataset.action;
+            if (action === 'approve') openApprove(button.dataset.id);
+            if (action === 'reject') rejectLoan(button.dataset.id);
+            if (action === 'disburse') openDisburse(button.dataset.id);
+            if (action === 'payment') openPayment(button.dataset.id);
+            if (action === 'verify') verifyKyc(button.dataset.user);
+        });
+
+        document.querySelectorAll('[data-close]').forEach(button => {
+            button.addEventListener('click', () => document.getElementById(button.dataset.close).close());
+        });
+
+        function findLoan(id) {
+            return allLoans.find(loan => loan.id === id);
+        }
+
+        function openApprove(id) {
+            const loan = findLoan(id);
+            if (!loan) return;
+            if (allAcceptances[id]) {
+                showMessage('Accepted contract terms are locked and cannot be edited.', true);
+                return;
+            }
+            document.getElementById('approveLoanId').value = id;
+            document.getElementById('approvedAmount').value = loan.approvedAmount || loan.amount || '';
+            document.getElementById('amountToReceive').value = loan.amountToReceive ?? loan.approvedAmount ?? loan.amount ?? '';
+            document.getElementById('approvedTerm').value = loan.termMonths || loan.requestedTermMonths || 6;
+            document.getElementById('monthlyRate').value = MoneyTreeLoans.number(loan.monthlyInterestRate, MoneyTreeLoans.TEMP_RULES.monthlyInterestRate) * 100;
+            document.getElementById('arrangementFee').value = loan.arrangementFee || MoneyTreeLoans.TEMP_RULES.arrangementFee;
+            document.getElementById('monthlyAdminFee').value = loan.monthlyAdminFee || MoneyTreeLoans.TEMP_RULES.monthlyAdminFee;
+            document.getElementById('repaymentMethod').value = loan.repaymentMethod || MoneyTreeLoans.TEMP_RULES.repaymentMethod;
+            document.getElementById('approvedFirstPaymentDate').value = MoneyTreeLoans.dateInputValue(
+                loan.firstPaymentDate || MoneyTreeLoans.addMonths(new Date(), 1)
+            );
+            document.getElementById('approveDialog').showModal();
+        }
+
+        document.getElementById('approveForm').addEventListener('submit', async event => {
+            event.preventDefault();
+            const loanId = document.getElementById('approveLoanId').value;
+            const principal = Number(document.getElementById('approvedAmount').value);
+            const amountToReceive = Number(document.getElementById('amountToReceive').value);
+            const termMonths = Number(document.getElementById('approvedTerm').value);
+            const monthlyInterestRate = Number(document.getElementById('monthlyRate').value) / 100;
+            const arrangementFee = Number(document.getElementById('arrangementFee').value);
+            const monthlyAdminFee = Number(document.getElementById('monthlyAdminFee').value);
+            const repaymentMethod = document.getElementById('repaymentMethod').value;
+
+            try {
+                if (amountToReceive > principal) {
+                    throw new Error('Amount to receive cannot be greater than the approved loan amount.');
+                }
+                const preview = MoneyTreeLoans.calculateSchedule({
+                    principal,
+                    termMonths,
+                    monthlyInterestRate,
+                    arrangementFee,
+                    monthlyAdminFee,
+                    firstPaymentDate: document.getElementById('approvedFirstPaymentDate').value
+                });
+                const contractTerms = MoneyTreeLoans.buildContractTerms(preview, {
+                    amountToReceive,
+                    repaymentMethod,
+                    paymentFrequency: 'Monthly'
+                });
+                const termsVersion = `${loanId}-${Date.now()}`;
+                await db.collection('loans').doc(loanId).update({
+                    status: 'approved',
+                    approvedAmount: preview.principal,
+                    amountToReceive: contractTerms.amountToReceive,
+                    termMonths: preview.termMonths,
+                    monthlyInterestRate: preview.monthlyInterestRate,
+                    annualPercentageRate: preview.annualPercentageRate,
+                    arrangementFee: preview.arrangementFee,
+                    monthlyAdminFee: preview.monthlyAdminFee,
+                    totalInterest: preview.totalInterest,
+                    totalFees: preview.totalFees,
+                    totalCostOfCredit: preview.totalCostOfCredit,
+                    totalRepay: preview.totalRepay,
+                    installmentAmount: preview.installmentAmount,
+                    remainingBalance: preview.totalRepay,
+                    repaymentMethod,
+                    paymentFrequency: 'Monthly',
+                    firstPaymentDate: preview.firstPaymentDate,
+                    loanEndDate: preview.loanEndDate,
+                    installments: preview.installments,
+                    contractVersion: MoneyTreeLoans.CONTRACT_VERSION,
+                    termsVersion,
+                    contractTerms,
+                    temporaryPolicy: true,
+                    approvedBy: currentAdmin.uid,
+                    approvedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                    approvedAtISO: new Date().toISOString()
+                });
+                document.getElementById('approveDialog').close();
+                showMessage('Terms saved. The borrower must now review and accept the contract.');
+            } catch (error) {
+                console.error('Approval error:', error);
+                showMessage(error.message || 'The loan could not be approved.', true);
+            }
+        });
+
+        function openDisburse(id) {
+            const loan = findLoan(id);
+            if (!loan) return;
+            if (!allAcceptances[id]) {
+                showMessage('The borrower must accept the contract before disbursement.', true);
+                return;
+            }
+            if (!loan.contractTerms || !loan.firstPaymentDate || !(loan.installments || []).length) {
+                showMessage('The approved terms are incomplete. Re-save them before borrower acceptance.', true);
+                return;
+            }
+            document.getElementById('disburseLoanId').value = id;
+            document.getElementById('disbursedAmount').value = loan.amountToReceive ?? loan.contractTerms.amountToReceive ?? '';
+            document.getElementById('firstPaymentDate').value = MoneyTreeLoans.dateInputValue(loan.firstPaymentDate);
+            document.getElementById('disburseDialog').showModal();
+        }
+
+        document.getElementById('disburseForm').addEventListener('submit', async event => {
+            event.preventDefault();
+            const loanId = document.getElementById('disburseLoanId').value;
+            const loan = findLoan(loanId);
+            if (!loan) return;
+
+            try {
+                const acceptanceSnapshot = await db.collection('loanAcceptances').doc(loanId).get();
+                if (!acceptanceSnapshot.exists) {
+                    throw new Error('The borrower has not accepted this contract.');
+                }
+                if (acceptanceSnapshot.data().termsVersion !== loan.termsVersion) {
+                    throw new Error('The accepted terms do not match the current loan terms.');
+                }
+                await db.collection('loans').doc(loanId).update({
+                    status: 'active',
+                    disbursedAmount: MoneyTreeLoans.roundMoney(loan.amountToReceive),
+                    loanStartDate: new Date().toISOString(),
+                    totalPaid: 0,
+                    remainingBalance: loan.totalRepay,
+                    disbursedBy: currentAdmin.uid,
+                    disbursedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                    disbursedAtISO: new Date().toISOString()
+                });
+                document.getElementById('disburseDialog').close();
+                showMessage('Loan marked as disbursed and repayment schedule generated.');
+            } catch (error) {
+                console.error('Disbursement error:', error);
+                showMessage(error.message || 'The loan could not be disbursed.', true);
+            }
+        });
+
+        function openPayment(id) {
+            const loan = findLoan(id);
+            if (!loan) return;
+            const next = MoneyTreeLoans.nextInstallment(loan);
+            document.getElementById('paymentLoanId').value = id;
+            document.getElementById('paymentAmount').value = next ? Math.max(0, MoneyTreeLoans.roundMoney(next.amount - next.paidAmount)) : '';
+            document.getElementById('paymentDate').value = MoneyTreeLoans.dateInputValue(new Date());
+            document.getElementById('paymentReference').value = '';
+            document.getElementById('paymentDialog').showModal();
+        }
+
+        document.getElementById('paymentForm').addEventListener('submit', async event => {
+            event.preventDefault();
+            const loanId = document.getElementById('paymentLoanId').value;
+            const amount = Number(document.getElementById('paymentAmount').value);
+            const paymentDate = document.getElementById('paymentDate').value;
+            const reference = document.getElementById('paymentReference').value.trim();
+            const loanRef = db.collection('loans').doc(loanId);
+            const paymentRef = loanRef.collection('payments').doc();
+
+            try {
+                await db.runTransaction(async transaction => {
+                    const snapshot = await transaction.get(loanRef);
+                    if (!snapshot.exists) throw new Error('Loan not found.');
+                    const loan = snapshot.data();
+                    const result = MoneyTreeLoans.applyPayment(loan, amount, paymentDate);
+                    if (result.appliedAmount <= 0) throw new Error('This loan has no outstanding balance.');
+
+                    transaction.update(loanRef, {
+                        installments: result.installments,
+                        totalPaid: result.totalPaid,
+                        remainingBalance: result.remainingBalance,
+                        status: result.status,
+                        lastPaymentAt: paymentDate,
+                        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                    transaction.set(paymentRef, {
+                        amount: result.appliedAmount,
+                        reference,
+                        paymentDate,
+                        recordedBy: currentAdmin.uid,
+                        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                        createdAtISO: new Date().toISOString()
+                    });
+                });
+                document.getElementById('paymentDialog').close();
+                showMessage('Payment recorded and borrower balances updated.');
+            } catch (error) {
+                console.error('Payment error:', error);
+                showMessage(error.message || 'The payment could not be recorded.', true);
+            }
+        });
+
+        async function rejectLoan(id) {
+            const reason = window.prompt('Enter the reason for rejection:');
+            if (!reason || !reason.trim()) return;
+            try {
+                await db.collection('loans').doc(id).update({
+                    status: 'rejected',
+                    rejectionReason: reason.trim(),
+                    rejectedBy: currentAdmin.uid,
+                    rejectedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                    rejectedAtISO: new Date().toISOString()
+                });
+                showMessage('Loan application rejected.');
+            } catch (error) {
+                showMessage(error.message || 'The application could not be rejected.', true);
+            }
+        }
+
+        async function verifyKyc(userId) {
+            if (!userId) return;
+            if (!window.confirm('Confirm that this customer’s KYC documents have been reviewed?')) return;
+            try {
+                await db.collection('users').doc(userId).update({
+                    kycStatus: 'verified',
+                    kycVerifiedBy: currentAdmin.uid,
+                    kycVerifiedAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                showMessage('Customer KYC marked as verified.');
+            } catch (error) {
+                showMessage(error.message || 'KYC status could not be updated.', true);
+            }
+        }
+
+        document.getElementById('logoutButton').addEventListener('click', async () => {
+            await auth.signOut();
+            window.location.href = 'index.html';
+        });
+
+        function showMessage(text, error = false) {
+            const element = document.getElementById('adminMessage');
+            element.textContent = text;
+            element.style.color = error ? '#b42318' : '#18794e';
+            window.setTimeout(() => {
+                if (element.textContent === text) element.textContent = '';
+            }, 5000);
+        }
+    </script>
+</body>
+</html>
