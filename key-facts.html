@@ -74,6 +74,7 @@
         function renderKfs(loan) {
             const summary = MoneyTreeLoans.loanSummary(loan);
             const installments = (loan.installments || []).map(MoneyTreeLoans.installmentView);
+            const affordability = loan.contractTerms?.affordability || null;
             const number = MoneyTreeLoans.escapeHtml(loan.applicationNumber || `MT-${loan.id.slice(0, 8).toUpperCase()}`);
             const borrower = MoneyTreeLoans.escapeHtml(loan.fullName || 'Money Tree customer');
             const durationDays = loan.firstPaymentDate && loan.loanEndDate
@@ -114,6 +115,18 @@
                         <div class="detail-row"><span>Typical payment amount</span><strong>${MoneyTreeLoans.money(loan.installmentAmount || installments[0]?.amount || 0)}</strong></div>
                         <div class="detail-row"><span>Total amount payable</span><strong>${MoneyTreeLoans.money(summary.totalRepay)}</strong></div>
                     </div>
+
+                    ${affordability ? `
+                        <div class="document-grid section-gap">
+                            <div class="document-grid-title">Payroll affordability</div>
+                            <div class="detail-row"><span>Basic monthly salary</span><strong>${MoneyTreeLoans.money(affordability.basicSalary)}</strong></div>
+                            <div class="detail-row"><span>Existing monthly deductions</span><strong>${MoneyTreeLoans.money(affordability.existingDeductions)}</strong></div>
+                            <div class="detail-row"><span>Minimum salary retained (40%)</span><strong>${MoneyTreeLoans.money(affordability.minimumSalaryRemaining)}</strong></div>
+                            <div class="detail-row"><span>Available payroll-deduction capacity</span><strong>${MoneyTreeLoans.money(affordability.availableMonthlyDeduction)}</strong></div>
+                            <div class="detail-row"><span>Highest proposed payroll deduction</span><strong>${MoneyTreeLoans.money(affordability.projectedPayrollDeduction)}</strong></div>
+                            <div class="detail-row"><span>Projected salary remaining</span><strong>${MoneyTreeLoans.money(affordability.projectedSalaryAfterDeductions)}</strong></div>
+                        </div>
+                    ` : ''}
                 </section>
 
                 <section class="document-section">

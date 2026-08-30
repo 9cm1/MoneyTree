@@ -576,6 +576,26 @@ summary:focus-visible {
     gap: 12px;
 }
 
+.document-upload-frame {
+    display: block;
+    width: 100%;
+    height: 650px;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: #fff;
+}
+
+.document-upload-frame[hidden] {
+    display: none;
+}
+
+.document-upload-help {
+    display: block;
+    margin-top: 9px;
+    color: var(--muted);
+    font-size: 0.73rem;
+}
+
 .bottom-nav {
     position: fixed;
     right: 50%;

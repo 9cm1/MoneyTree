@@ -24,7 +24,7 @@
 
         <section class="page-content">
             <div class="draft-banner">
-                <strong>Prototype pricing:</strong> final interest, fees and approval conditions will be confirmed by the client before launch. Your application does not guarantee approval.
+                <strong>Civil-servant loan application:</strong> an employee number, NRC front, NRC back and recent payslip are required. Final interest, fees and approval conditions remain subject to client confirmation.
             </div>
 
             <div id="message" class="message-space" role="status" aria-live="polite"></div>
@@ -44,6 +44,10 @@
                         <div class="field">
                             <label for="nrcNumber">NRC number <span class="required">*</span></label>
                             <input id="nrcNumber" name="nrcNumber" placeholder="123456/78/1" required />
+                        </div>
+                        <div class="field">
+                            <label for="employeeNumber">Civil-service employee number <span class="required">*</span></label>
+                            <input id="employeeNumber" name="employeeNumber" maxlength="40" pattern="[A-Za-z0-9 /_-]{2,40}" autocomplete="off" placeholder="Enter the number on your payslip" required />
                         </div>
                         <div class="field">
                             <label for="mobileMoney">Mobile money number <span class="required">*</span></label>
@@ -75,34 +79,29 @@
                         <textarea id="purpose" name="purpose" maxlength="240" placeholder="Briefly explain what the loan will be used for" required></textarea>
                         <small>Maximum 240 characters.</small>
                     </div>
+                    <div class="notice">
+                        <strong>Repayment method:</strong> all approved Money Tree loans use monthly payroll deduction. The administrator will verify payslip affordability and ensure at least 40% of basic salary remains after deductions.
+                    </div>
                 </section>
 
                 <section class="form-section">
                     <h3><i class="far fa-folder-open"></i> Supporting documents</h3>
                     <div class="notice">
-                        Files selected in this prototype are <strong>not uploaded</strong> and never leave your device. The client must configure protected document storage before launch.
+                        Upload a clear NRC front, NRC back and recent payslip. The files go to the administrator's <strong>private Google Drive</strong>, not Firebase Storage. Only authorised administrators should have access to that Drive folder.
                     </div>
-                    <div class="upload-grid section-gap">
-                        <label class="file-upload" for="nrcFile">
-                            <span class="icon"><i class="far fa-id-card"></i></span>
-                            <span class="text">NRC copy</span>
-                            <span id="nrcFilename" class="filename">Optional in prototype</span>
-                            <input id="nrcFile" type="file" accept="image/*,application/pdf" hidden />
-                        </label>
-                        <label class="file-upload" for="payslipFile">
-                            <span class="icon"><i class="far fa-file-lines"></i></span>
-                            <span class="text">Latest payslip</span>
-                            <span id="payslipFilename" class="filename">Optional in prototype</span>
-                            <input id="payslipFile" type="file" accept="image/*,application/pdf" hidden />
-                        </label>
+                    <div id="documentUploadStatus" class="notice section-gap" role="status" aria-live="polite">
+                        Connecting to the private document receiver…
                     </div>
+                    <iframe id="documentUploadFrame" class="document-upload-frame section-gap" title="Secure NRC and payslip upload" loading="lazy" hidden></iframe>
+                    <small class="document-upload-help">Accepted: PDF, JPG or PNG. Maximum 5 MB per file. All three documents are required before the application can be submitted.</small>
+                    <noscript><div class="error-box section-gap">JavaScript is required to upload the supporting documents.</div></noscript>
                 </section>
 
                 <section class="form-section">
                     <div class="field">
                         <label style="display:flex;gap:10px;align-items:flex-start;font-weight:600;">
                             <input id="consent" type="checkbox" style="width:auto;min-height:0;margin-top:3px;" required />
-                            <span>I confirm that the information supplied is accurate and understand that final loan terms will be shown in the Key Facts Statement before acceptance.</span>
+                            <span>I confirm that the information and documents supplied are accurate, consent to authorised administrators reviewing them for this application, and understand that final loan terms will be shown before acceptance.</span>
                         </label>
                     </div>
                 </section>
@@ -126,9 +125,173 @@
     <script src="loan-utils.js"></script>
     <script>
         let currentUser = null;
+        let pendingLoanRef = null;
+        let pendingApplicationNumber = '';
+        let documentReceipt = null;
+        let uploadChannel = '';
         const form = document.getElementById('loanForm');
         const submitButton = document.getElementById('submitBtn');
         const message = document.getElementById('message');
+        const uploadFrame = document.getElementById('documentUploadFrame');
+        const uploadStatus = document.getElementById('documentUploadStatus');
+
+        function setUploadStatus(type, text) {
+            uploadStatus.className = `${type} section-gap`;
+            uploadStatus.textContent = text;
+        }
+
+        function createUploadChannel() {
+            const values = new Uint32Array(4);
+            window.crypto.getRandomValues(values);
+            return Array.from(values, value => value.toString(36)).join('-');
+        }
+
+        function configuredUploadUrl() {
+            try {
+                const value = window.documentUploadConfig?.webAppUrl || '';
+                const url = new URL(value);
+                const valid = url.protocol === 'https:'
+                    && url.hostname === 'script.google.com'
+                    && url.pathname.startsWith('/macros/s/')
+                    && url.pathname.endsWith('/exec');
+                return valid ? url : null;
+            } catch (error) {
+                return null;
+            }
+        }
+
+        function isTrustedDocumentOrigin(origin) {
+            try {
+                const url = new URL(origin);
+                return url.protocol === 'https:'
+                    && (url.hostname === 'script.google.com' || url.hostname.endsWith('.googleusercontent.com'));
+            } catch (error) {
+                return false;
+            }
+        }
+
+        function initialiseDocumentUploader() {
+            const url = configuredUploadUrl();
+            if (!url) {
+                setUploadStatus('error-box', 'Document upload is not configured yet. The administrator must deploy the supplied Google Apps Script receiver and paste its /exec URL into config.js.');
+                uploadFrame.hidden = true;
+                return;
+            }
+            uploadChannel = createUploadChannel();
+            url.searchParams.set('channel', uploadChannel);
+            uploadFrame.src = url.toString();
+            uploadFrame.hidden = false;
+            setUploadStatus('notice', 'Connecting to the private document receiver…');
+        }
+
+        function identityValues() {
+            return {
+                fullName: document.getElementById('fullName').value.trim(),
+                employeeNumber: document.getElementById('employeeNumber').value.trim(),
+                nrcNumber: document.getElementById('nrcNumber').value.trim()
+            };
+        }
+
+        function receiptMatchesCurrentApplication(receipt) {
+            if (!receipt || !currentUser || !pendingApplicationNumber) return false;
+            const identity = identityValues();
+            return receipt.userId === currentUser.uid
+                && receipt.applicationNumber === pendingApplicationNumber
+                && receipt.fullName === identity.fullName
+                && receipt.employeeNumber === identity.employeeNumber
+                && receipt.nrcNumber === identity.nrcNumber
+                && /^[A-Za-z0-9_-]{10,200}$/.test(receipt.folderId || '')
+                && /^[A-Za-z0-9-]{10,100}$/.test(receipt.receiptId || '');
+        }
+
+        window.addEventListener('message', async event => {
+            const data = event.data || {};
+            if (!uploadChannel || data.channel !== uploadChannel || !isTrustedDocumentOrigin(event.origin)) return;
+
+            if (data.type === 'moneytree-upload-ready') {
+                setUploadStatus('notice', 'Private receiver connected. Select and upload all three required documents below.');
+                return;
+            }
+
+            if (data.type === 'moneytree-upload-resize') {
+                const requestedHeight = Number(data.height);
+                if (Number.isFinite(requestedHeight)) {
+                    uploadFrame.style.height = `${Math.min(820, Math.max(420, requestedHeight))}px`;
+                }
+                return;
+            }
+
+            if (data.type === 'moneytree-request-upload-context') {
+                const identity = identityValues();
+                if (!currentUser || !pendingLoanRef || !pendingApplicationNumber) {
+                    event.source?.postMessage({
+                        type: 'moneytree-upload-context-error',
+                        channel: uploadChannel,
+                        message: 'Your signed-in application session is not ready. Please reload the page.'
+                    }, event.origin);
+                    return;
+                }
+                if (!identity.fullName || !identity.employeeNumber || !identity.nrcNumber) {
+                    event.source?.postMessage({
+                        type: 'moneytree-upload-context-error',
+                        channel: uploadChannel,
+                        message: 'Enter your full name, employee number and NRC number above before uploading.'
+                    }, event.origin);
+                    return;
+                }
+                try {
+                    const idToken = await currentUser.getIdToken(true);
+                    event.source?.postMessage({
+                        type: 'moneytree-upload-context',
+                        channel: uploadChannel,
+                        payload: {
+                            idToken,
+                            userId: currentUser.uid,
+                            email: currentUser.email || '',
+                            fullName: identity.fullName,
+                            employeeNumber: identity.employeeNumber,
+                            nrcNumber: identity.nrcNumber,
+                            applicationNumber: pendingApplicationNumber,
+                            loanId: pendingLoanRef.id,
+                            parentOrigin: window.location.origin
+                        }
+                    }, event.origin);
+                } catch (error) {
+                    event.source?.postMessage({
+                        type: 'moneytree-upload-context-error',
+                        channel: uploadChannel,
+                        message: 'Your login could not be verified. Please sign in again.'
+                    }, event.origin);
+                }
+                return;
+            }
+
+            if (data.type === 'moneytree-upload-complete') {
+                const receipt = data.payload || null;
+                if (!receiptMatchesCurrentApplication(receipt)) {
+                    documentReceipt = null;
+                    setUploadStatus('error-box', 'The upload receipt did not match this application. Please upload the documents again.');
+                    return;
+                }
+                documentReceipt = receipt;
+                setUploadStatus('success-box', `Documents received securely for ${receipt.applicationNumber}. You can now submit the loan application.`);
+                return;
+            }
+
+            if (data.type === 'moneytree-upload-error') {
+                documentReceipt = null;
+                setUploadStatus('error-box', data.message || 'The documents could not be uploaded. Please try again.');
+            }
+        });
+
+        ['fullName', 'employeeNumber', 'nrcNumber'].forEach(id => {
+            document.getElementById(id).addEventListener('input', () => {
+                if (documentReceipt && !receiptMatchesCurrentApplication(documentReceipt)) {
+                    documentReceipt = null;
+                    setUploadStatus('notice', 'Your identity details changed after upload. Upload all three documents again so the receipt matches this application.');
+                }
+            });
+        });
 
         auth.onAuthStateChanged(async user => {
             if (!user) {
@@ -136,6 +299,10 @@
                 return;
             }
             currentUser = user;
+            if (!pendingLoanRef) {
+                pendingLoanRef = db.collection('loans').doc();
+                pendingApplicationNumber = MoneyTreeLoans.applicationNumber(pendingLoanRef.id);
+            }
             try {
                 const profileSnapshot = await db.collection('users').doc(user.uid).get();
                 if (!profileSnapshot.exists) return;
@@ -148,23 +315,19 @@
             }
         });
 
-        document.getElementById('nrcFile').addEventListener('change', event => {
-            document.getElementById('nrcFilename').textContent = event.target.files[0]?.name || 'Optional in prototype';
-        });
-        document.getElementById('payslipFile').addEventListener('change', event => {
-            document.getElementById('payslipFilename').textContent = event.target.files[0]?.name || 'Optional in prototype';
-        });
+        initialiseDocumentUploader();
 
         form.addEventListener('submit', async event => {
             event.preventDefault();
             message.textContent = '';
-            if (!currentUser) return;
+            if (!currentUser || !pendingLoanRef) return;
 
             if (!form.reportValidity()) return;
 
             const fullName = document.getElementById('fullName').value.trim();
             const dob = document.getElementById('dob').value;
             const nrcNumber = document.getElementById('nrcNumber').value.trim();
+            const employeeNumber = document.getElementById('employeeNumber').value.trim();
             const mobileMoney = document.getElementById('mobileMoney').value.trim();
             const amount = Number(document.getElementById('amount').value);
             const termMonths = Number(document.getElementById('termMonths').value);
@@ -175,19 +338,26 @@
                 message.style.color = '#b42318';
                 return;
             }
+            if (!receiptMatchesCurrentApplication(documentReceipt)) {
+                message.textContent = 'Upload the NRC front, NRC back and recent payslip before submitting the application.';
+                message.style.color = '#b42318';
+                uploadStatus.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                return;
+            }
 
             submitButton.disabled = true;
             submitButton.innerHTML = '<i class="fas fa-circle-notch spin"></i> Submitting…';
 
             try {
-                const loanRef = db.collection('loans').doc();
-                const applicationNumber = MoneyTreeLoans.applicationNumber(loanRef.id);
+                const loanRef = pendingLoanRef;
+                const applicationNumber = pendingApplicationNumber;
                 await loanRef.set({
                     userId: currentUser.uid,
                     applicationNumber,
                     fullName,
                     dateOfBirth: dob,
                     nrcNumber,
+                    employeeNumber,
                     mobileMoney,
                     amount: MoneyTreeLoans.roundMoney(amount),
                     requestedTermMonths: termMonths,
@@ -196,10 +366,16 @@
                     status: 'pending',
                     totalPaid: 0,
                     temporaryPolicy: true,
-                    documentsUploaded: false,
+                    documentsUploaded: true,
+                    documentsReviewed: false,
+                    documentStorage: 'google-drive-private',
+                    documentFolderId: documentReceipt.folderId,
+                    documentUploadReceipt: documentReceipt.receiptId,
+                    documentUploadedAtISO: documentReceipt.uploadedAt,
                     documentNames: {
-                        nrc: document.getElementById('nrcFile').files[0]?.name || '',
-                        payslip: document.getElementById('payslipFile').files[0]?.name || ''
+                        nrcFront: documentReceipt.files?.nrcFront?.name || 'NRC front',
+                        nrcBack: documentReceipt.files?.nrcBack?.name || 'NRC back',
+                        payslip: documentReceipt.files?.payslip?.name || 'Recent payslip'
                     },
                     createdAt: firebase.firestore.FieldValue.serverTimestamp(),
                     createdAtISO: new Date().toISOString()
@@ -214,8 +390,8 @@
 
                 form.innerHTML = `
                     <div class="success-box">
-                        <strong>Application submitted</strong><br />
-                        Your application number is ${MoneyTreeLoans.escapeHtml(applicationNumber)}. The administrator will review your request and confirm the final terms.
+                        <strong>Application and documents submitted</strong><br />
+                        Your application number is ${MoneyTreeLoans.escapeHtml(applicationNumber)}. The administrator can now review your private documents and assess the payroll-deduction limit.
                     </div>
                     <div class="action-row">
                         <a class="btn btn-primary" href="order.html?loan=${encodeURIComponent(loanRef.id)}">Track application</a>
@@ -224,7 +400,8 @@
                 `;
             } catch (error) {
                 console.error('Application error:', error);
-                message.textContent = error.message || 'The application could not be submitted.';
+                const receiptReference = documentReceipt?.receiptId ? ` Upload receipt: ${documentReceipt.receiptId}.` : '';
+                message.textContent = `${error.message || 'The application could not be submitted.'}${receiptReference}`;
                 message.style.color = '#b42318';
                 submitButton.disabled = false;
                 submitButton.innerHTML = '<i class="fas fa-paper-plane"></i> Submit application';

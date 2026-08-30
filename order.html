@@ -143,6 +143,11 @@
             const displayStatus = awaitingAcceptance ? 'Awaiting acceptance' : MoneyTreeLoans.statusLabel(loan.status);
             const displayStatusClass = awaitingAcceptance ? 'pending' : (loan.status || 'pending');
             const contractLabel = awaitingAcceptance ? 'Review and accept loan contract' : 'Loan contract';
+            const documentPanel = loan.documentsUploaded === true
+                ? (loan.documentsReviewed === true
+                    ? '<div class="success-box section-gap"><strong>Supporting documents verified.</strong> The administrator has reviewed your NRC front, NRC back and recent payslip.</div>'
+                    : '<div class="notice section-gap"><strong>Supporting documents received.</strong> Your private NRC and payslip files are awaiting administrator review.</div>')
+                : '<div class="error-box section-gap"><strong>Supporting documents incomplete.</strong> Contact the administrator before this application can be approved.</div>';
 
             let acceptancePanel = '';
             if (awaitingAcceptance) {
@@ -168,6 +173,7 @@
             content.className = '';
             content.innerHTML = `
                 ${loan.temporaryPolicy ? '<div class="draft-banner"><strong>Temporary figures:</strong> the administrator must replace the test rate and legal wording with the client’s approved policy before launch.</div>' : ''}
+                ${documentPanel}
                 ${acceptancePanel}
                 <article class="card">
                     <div class="card-header">

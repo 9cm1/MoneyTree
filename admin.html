@@ -29,7 +29,7 @@
 
         <section class="page-content">
             <div class="draft-banner">
-                <strong>Test policy active:</strong> approval forms default to 2% monthly interest and zero fees. Replace these values with the client’s approved lending policy before processing real loans.
+                <strong>Current prototype policy:</strong> every loan uses payroll deduction and must leave at least 40% of basic salary after deductions. The form still defaults to 2% monthly interest and zero fees until the client confirms the official rates.
             </div>
 
             <div id="adminMessage" class="message-space" role="status" aria-live="polite"></div>
@@ -41,7 +41,7 @@
                 <div class="admin-stat"><strong id="statTotal">0</strong><span>Total records</span></div>
             </div>
 
-            <input id="searchInput" class="search-input" type="search" placeholder="Search name, NRC, phone, email or application number" aria-label="Search loans" />
+            <input id="searchInput" class="search-input" type="search" placeholder="Search name, employee number, NRC, phone, email or application number" aria-label="Search loans" />
 
             <div class="tabs" role="tablist" aria-label="Loan status filters">
                 <button class="active" type="button" data-tab="pending">Pending</button>
@@ -66,7 +66,24 @@
         </div>
         <form id="approveForm" class="dialog-body">
             <input id="approveLoanId" type="hidden" />
-            <div class="notice">These fields control the borrower’s Key Facts Statement and repayment totals.</div>
+            <div class="notice">Enter the salary information exactly as it appears on the verified payslip. The system will preserve 40% of basic salary and calculate the affordable loan ceiling.</div>
+            <h3 class="section-gap">Payslip affordability</h3>
+            <div class="form-grid section-gap">
+                <div class="field">
+                    <label for="basicSalary">Basic monthly salary (ZMW)</label>
+                    <input id="basicSalary" type="number" min="0.01" step="0.01" required />
+                </div>
+                <div class="field">
+                    <label for="existingDeductions">Existing total monthly deductions (ZMW)</label>
+                    <input id="existingDeductions" type="number" min="0" step="0.01" required />
+                </div>
+            </div>
+
+            <div id="affordabilityPreview" class="notice section-gap" aria-live="polite">
+                Enter the payslip and proposed-loan figures to calculate affordability.
+            </div>
+
+            <h3 class="section-gap">Proposed loan terms</h3>
             <div class="form-grid section-gap">
                 <div class="field">
                     <label for="approvedAmount">Approved amount (ZMW)</label>
@@ -94,12 +111,7 @@
                 </div>
                 <div class="field">
                     <label for="repaymentMethod">Repayment method</label>
-                    <select id="repaymentMethod" required>
-                        <option>Manual payment</option>
-                        <option>Mobile money</option>
-                        <option>Payroll deduction</option>
-                        <option>Bank transfer</option>
-                    </select>
+                    <input id="repaymentMethod" value="Payroll deduction" readonly required />
                 </div>
                 <div class="field">
                     <label for="approvedFirstPaymentDate">First payment date</label>
@@ -233,6 +245,7 @@
                 const haystack = [
                     loan.applicationNumber,
                     loan.fullName,
+                    loan.employeeNumber,
                     loan.nrcNumber,
                     loan.mobileMoney,
                     loan.purpose,
@@ -265,13 +278,21 @@
             const name = loan.fullName || user.fullName || 'Unknown customer';
             const phone = loan.mobileMoney || user.phoneNumber || 'Not provided';
             const nrc = loan.nrcNumber || user.nrcNumber || 'Not provided';
+            const employeeNumber = loan.employeeNumber || 'Not provided';
             const email = user.email || 'Not provided';
             const applicationNumber = loan.applicationNumber || `MT-${loan.id.slice(0, 8).toUpperCase()}`;
             const safeId = MoneyTreeLoans.escapeHtml(loan.id);
+            const driveFolderId = String(loan.documentFolderId || '');
+            const documentsReady = loan.documentsUploaded === true
+                && loan.documentStorage === 'google-drive-private'
+                && /^[A-Za-z0-9_-]{10,200}$/.test(driveFolderId);
+            const documentsReviewed = loan.documentsReviewed === true;
 
             let actions = '';
             if (loan.status === 'pending') {
-                actions += `<button class="btn btn-primary btn-small" type="button" data-action="approve" data-id="${safeId}"><i class="fas fa-check"></i> Approve</button>`;
+                if (documentsReady && documentsReviewed && user.kycStatus === 'verified') {
+                    actions += `<button class="btn btn-primary btn-small" type="button" data-action="approve" data-id="${safeId}"><i class="fas fa-check"></i> Approve</button>`;
+                }
                 actions += `<button class="btn btn-danger btn-small" type="button" data-action="reject" data-id="${safeId}"><i class="fas fa-xmark"></i> Reject</button>`;
             }
             if (loan.status === 'approved' && !acceptance) {
@@ -286,8 +307,11 @@
             if (['active', 'disbursed'].includes(loan.status)) {
                 actions += `<button class="btn btn-primary btn-small" type="button" data-action="payment" data-id="${safeId}"><i class="fas fa-plus"></i> Record payment</button>`;
             }
-            if (user.kycStatus !== 'verified') {
-                actions += `<button class="btn btn-outline btn-small" type="button" data-action="verify" data-user="${MoneyTreeLoans.escapeHtml(loan.userId)}"><i class="fas fa-user-check"></i> Verify KYC</button>`;
+            if (documentsReady) {
+                actions += `<a class="btn btn-outline btn-small" href="https://drive.google.com/drive/folders/${encodeURIComponent(driveFolderId)}" target="_blank" rel="noopener noreferrer"><i class="fab fa-google-drive"></i> Open private documents</a>`;
+            }
+            if (documentsReady && (!documentsReviewed || user.kycStatus !== 'verified')) {
+                actions += `<button class="btn btn-outline btn-small" type="button" data-action="verify" data-id="${safeId}" data-user="${MoneyTreeLoans.escapeHtml(loan.userId)}"><i class="fas fa-user-check"></i> Confirm documents and KYC</button>`;
             }
 
             return `
@@ -307,8 +331,37 @@
                         <div><span>Remaining</span><strong>${MoneyTreeLoans.money(summary.remainingBalance)}</strong></div>
                         <div><span>Phone</span><strong>${MoneyTreeLoans.escapeHtml(phone)}</strong></div>
                         <div><span>NRC</span><strong>${MoneyTreeLoans.escapeHtml(nrc)}</strong></div>
+                        <div><span>Employee number</span><strong>${MoneyTreeLoans.escapeHtml(employeeNumber)}</strong></div>
                         <div><span>Email</span><strong>${MoneyTreeLoans.escapeHtml(email)}</strong></div>
                     </div>
+
+                    ${documentsReady ? `
+                        <div class="success-box section-gap">
+                            <strong>Documents received in private Drive</strong><br />
+                            NRC front: ${MoneyTreeLoans.escapeHtml(loan.documentNames?.nrcFront || 'Received')}<br />
+                            NRC back: ${MoneyTreeLoans.escapeHtml(loan.documentNames?.nrcBack || 'Received')}<br />
+                            Payslip: ${MoneyTreeLoans.escapeHtml(loan.documentNames?.payslip || 'Received')}
+                        </div>
+                    ` : `
+                        <div class="error-box section-gap">
+                            <strong>Required documents are missing.</strong> Approval remains locked until NRC front, NRC back and payslip are received.
+                        </div>
+                    `}
+
+                    ${documentsReady && (!documentsReviewed || user.kycStatus !== 'verified') ? `
+                        <div class="notice section-gap"><strong>Document review required.</strong> Open all three private files, compare the employee and NRC details, then confirm documents and KYC before approval.</div>
+                    ` : ''}
+
+                    ${loan.basicSalary != null ? `
+                        <div class="admin-meta">
+                            <div><span>Basic salary</span><strong>${MoneyTreeLoans.money(loan.basicSalary)}</strong></div>
+                            <div><span>Existing deductions</span><strong>${MoneyTreeLoans.money(loan.existingDeductions)}</strong></div>
+                            <div><span>Available loan deduction</span><strong>${MoneyTreeLoans.money(loan.availableMonthlyDeduction)}</strong></div>
+                            <div><span>Maximum affordable loan</span><strong>${MoneyTreeLoans.money(loan.maximumAffordableLoan)}</strong></div>
+                            <div><span>Proposed payroll deduction</span><strong>${MoneyTreeLoans.money(loan.projectedPayrollDeduction)}</strong></div>
+                            <div><span>Salary remaining</span><strong>${MoneyTreeLoans.money(loan.projectedSalaryAfterDeductions)}</strong></div>
+                        </div>
+                    ` : ''}
 
                     ${loan.status === 'approved' && !acceptance ? `
                         <div class="notice section-gap">
@@ -352,7 +405,7 @@
             if (action === 'reject') rejectLoan(button.dataset.id);
             if (action === 'disburse') openDisburse(button.dataset.id);
             if (action === 'payment') openPayment(button.dataset.id);
-            if (action === 'verify') verifyKyc(button.dataset.user);
+            if (action === 'verify') verifyKyc(button.dataset.user, button.dataset.id);
         });
 
         document.querySelectorAll('[data-close]').forEach(button => {
@@ -366,34 +419,135 @@
         function openApprove(id) {
             const loan = findLoan(id);
             if (!loan) return;
+            const borrower = allUsers[loan.userId] || {};
+            const documentsReady = loan.documentsUploaded === true
+                && loan.documentStorage === 'google-drive-private'
+                && /^[A-Za-z0-9_-]{10,200}$/.test(String(loan.documentFolderId || ''));
+            if (!documentsReady) {
+                showMessage('Review cannot proceed until all three private documents are received.', true);
+                return;
+            }
+            if (loan.documentsReviewed !== true) {
+                showMessage('Open all three documents and confirm the document review before approval.', true);
+                return;
+            }
+            if (borrower.kycStatus !== 'verified') {
+                showMessage('Open the documents and mark KYC verified before approving this loan.', true);
+                return;
+            }
             if (allAcceptances[id]) {
                 showMessage('Accepted contract terms are locked and cannot be edited.', true);
                 return;
             }
             document.getElementById('approveLoanId').value = id;
+            document.getElementById('basicSalary').value = loan.basicSalary ?? '';
+            document.getElementById('existingDeductions').value = loan.existingDeductions ?? '';
             document.getElementById('approvedAmount').value = loan.approvedAmount || loan.amount || '';
             document.getElementById('amountToReceive').value = loan.amountToReceive ?? loan.approvedAmount ?? loan.amount ?? '';
             document.getElementById('approvedTerm').value = loan.termMonths || loan.requestedTermMonths || 6;
             document.getElementById('monthlyRate').value = MoneyTreeLoans.number(loan.monthlyInterestRate, MoneyTreeLoans.TEMP_RULES.monthlyInterestRate) * 100;
             document.getElementById('arrangementFee').value = loan.arrangementFee || MoneyTreeLoans.TEMP_RULES.arrangementFee;
             document.getElementById('monthlyAdminFee').value = loan.monthlyAdminFee || MoneyTreeLoans.TEMP_RULES.monthlyAdminFee;
-            document.getElementById('repaymentMethod').value = loan.repaymentMethod || MoneyTreeLoans.TEMP_RULES.repaymentMethod;
+            document.getElementById('repaymentMethod').value = 'Payroll deduction';
             document.getElementById('approvedFirstPaymentDate').value = MoneyTreeLoans.dateInputValue(
                 loan.firstPaymentDate || MoneyTreeLoans.addMonths(new Date(), 1)
             );
+            updateAffordabilityPreview();
             document.getElementById('approveDialog').showModal();
         }
+
+        const affordabilityInputIds = [
+            'basicSalary',
+            'existingDeductions',
+            'approvedAmount',
+            'approvedTerm',
+            'monthlyRate',
+            'arrangementFee',
+            'monthlyAdminFee',
+            'approvedFirstPaymentDate'
+        ];
+        affordabilityInputIds.forEach(id => {
+            const element = document.getElementById(id);
+            element.addEventListener('input', updateAffordabilityPreview);
+            element.addEventListener('change', updateAffordabilityPreview);
+        });
+
+        function affordabilityInputs() {
+            return {
+                basicSalary: Number(document.getElementById('basicSalary').value),
+                existingDeductions: Number(document.getElementById('existingDeductions').value),
+                salaryRetentionRate: MoneyTreeLoans.TEMP_RULES.salaryRetentionRate,
+                approvedAmount: Number(document.getElementById('approvedAmount').value),
+                termMonths: Number(document.getElementById('approvedTerm').value),
+                monthlyInterestRate: Number(document.getElementById('monthlyRate').value) / 100,
+                arrangementFee: Number(document.getElementById('arrangementFee').value),
+                monthlyAdminFee: Number(document.getElementById('monthlyAdminFee').value),
+                firstPaymentDate: document.getElementById('approvedFirstPaymentDate').value
+            };
+        }
+
+        function updateAffordabilityPreview() {
+            const panel = document.getElementById('affordabilityPreview');
+            const inputs = affordabilityInputs();
+            if (!inputs.basicSalary || !inputs.termMonths || !inputs.firstPaymentDate || inputs.approvedAmount <= 0) {
+                panel.className = 'notice section-gap';
+                panel.textContent = 'Complete the salary and proposed-loan figures to calculate affordability.';
+                return null;
+            }
+
+            try {
+                const result = MoneyTreeLoans.evaluateAffordability(inputs);
+                panel.className = `${result.withinLimit ? 'success-box' : 'error-box'} section-gap`;
+                panel.innerHTML = `
+                    <strong>${result.withinLimit ? 'Within the 40% retention limit' : 'Proposed loan exceeds the affordability limit'}</strong>
+                    <div class="detail-list section-gap">
+                        <div class="detail-row"><span>Minimum salary that must remain (40%)</span><strong>${MoneyTreeLoans.money(result.minimumSalaryRemaining)}</strong></div>
+                        <div class="detail-row"><span>Maximum total deductions (60%)</span><strong>${MoneyTreeLoans.money(result.maximumTotalDeductions)}</strong></div>
+                        <div class="detail-row"><span>Available new payroll deduction</span><strong>${MoneyTreeLoans.money(result.availableMonthlyDeduction)}</strong></div>
+                        <div class="detail-row"><span>Maximum affordable loan for these terms</span><strong>${MoneyTreeLoans.money(result.maximumAffordableLoan)}</strong></div>
+                        <div class="detail-row"><span>Highest proposed monthly deduction</span><strong>${MoneyTreeLoans.money(result.projectedPayrollDeduction)}</strong></div>
+                        <div class="detail-row"><span>Projected salary remaining</span><strong>${MoneyTreeLoans.money(result.projectedSalaryAfterDeductions)}</strong></div>
+                    </div>
+                    ${result.maximumAffordableLoan > 0 ? `
+                        <div class="action-row">
+                            <button class="btn btn-secondary btn-small" type="button" data-use-maximum="${result.maximumAffordableLoan}"><i class="fas fa-calculator"></i> Use maximum affordable loan</button>
+                        </div>
+                    ` : ''}
+                `;
+                return result;
+            } catch (error) {
+                panel.className = 'error-box section-gap';
+                panel.textContent = error.message || 'Affordability could not be calculated.';
+                return null;
+            }
+        }
+
+        document.getElementById('affordabilityPreview').addEventListener('click', event => {
+            const button = event.target.closest('button[data-use-maximum]');
+            if (!button) return;
+            const approvedInput = document.getElementById('approvedAmount');
+            const receiveInput = document.getElementById('amountToReceive');
+            const previousApproved = Number(approvedInput.value);
+            const maximum = Number(button.dataset.useMaximum);
+            approvedInput.value = maximum.toFixed(2);
+            if (!receiveInput.value || Number(receiveInput.value) === previousApproved || Number(receiveInput.value) > maximum) {
+                receiveInput.value = maximum.toFixed(2);
+            }
+            updateAffordabilityPreview();
+        });
 
         document.getElementById('approveForm').addEventListener('submit', async event => {
             event.preventDefault();
             const loanId = document.getElementById('approveLoanId').value;
+            const basicSalary = Number(document.getElementById('basicSalary').value);
+            const existingDeductions = Number(document.getElementById('existingDeductions').value);
             const principal = Number(document.getElementById('approvedAmount').value);
             const amountToReceive = Number(document.getElementById('amountToReceive').value);
             const termMonths = Number(document.getElementById('approvedTerm').value);
             const monthlyInterestRate = Number(document.getElementById('monthlyRate').value) / 100;
             const arrangementFee = Number(document.getElementById('arrangementFee').value);
             const monthlyAdminFee = Number(document.getElementById('monthlyAdminFee').value);
-            const repaymentMethod = document.getElementById('repaymentMethod').value;
+            const repaymentMethod = 'Payroll deduction';
 
             try {
                 if (amountToReceive > principal) {
@@ -407,10 +561,25 @@
                     monthlyAdminFee,
                     firstPaymentDate: document.getElementById('approvedFirstPaymentDate').value
                 });
+                const affordability = MoneyTreeLoans.evaluateAffordability({
+                    basicSalary,
+                    existingDeductions,
+                    salaryRetentionRate: MoneyTreeLoans.TEMP_RULES.salaryRetentionRate,
+                    approvedAmount: principal,
+                    termMonths,
+                    monthlyInterestRate,
+                    arrangementFee,
+                    monthlyAdminFee,
+                    firstPaymentDate: document.getElementById('approvedFirstPaymentDate').value
+                });
+                if (!affordability.withinLimit) {
+                    throw new Error(`Approved amount exceeds the calculated maximum of ${MoneyTreeLoans.money(affordability.maximumAffordableLoan)}.`);
+                }
                 const contractTerms = MoneyTreeLoans.buildContractTerms(preview, {
                     amountToReceive,
                     repaymentMethod,
-                    paymentFrequency: 'Monthly'
+                    paymentFrequency: 'Monthly',
+                    affordability
                 });
                 const termsVersion = `${loanId}-${Date.now()}`;
                 await db.collection('loans').doc(loanId).update({
@@ -430,6 +599,16 @@
                     remainingBalance: preview.totalRepay,
                     repaymentMethod,
                     paymentFrequency: 'Monthly',
+                    basicSalary: affordability.basicSalary,
+                    existingDeductions: affordability.existingDeductions,
+                    salaryRetentionRate: affordability.salaryRetentionRate,
+                    minimumSalaryRemaining: affordability.minimumSalaryRemaining,
+                    maximumTotalDeductions: affordability.maximumTotalDeductions,
+                    availableMonthlyDeduction: affordability.availableMonthlyDeduction,
+                    maximumAffordableLoan: affordability.maximumAffordableLoan,
+                    projectedPayrollDeduction: affordability.projectedPayrollDeduction,
+                    projectedSalaryAfterDeductions: affordability.projectedSalaryAfterDeductions,
+                    affordabilityStatus: affordability.affordabilityStatus,
                     firstPaymentDate: preview.firstPaymentDate,
                     loanEndDate: preview.loanEndDate,
                     installments: preview.installments,
@@ -568,16 +747,29 @@
             }
         }
 
-        async function verifyKyc(userId) {
-            if (!userId) return;
-            if (!window.confirm('Confirm that this customer’s KYC documents have been reviewed?')) return;
+        async function verifyKyc(userId, loanId) {
+            if (!userId || !loanId) return;
+            const loan = findLoan(loanId);
+            if (!loan || loan.documentsUploaded !== true || loan.documentStorage !== 'google-drive-private') {
+                showMessage('The required private documents are not available for review.', true);
+                return;
+            }
+            if (!window.confirm('Confirm that you opened and reviewed the NRC front, NRC back and recent payslip, and that the employee and NRC details match this application?')) return;
             try {
-                await db.collection('users').doc(userId).update({
+                const batch = db.batch();
+                batch.update(db.collection('users').doc(userId), {
                     kycStatus: 'verified',
                     kycVerifiedBy: currentAdmin.uid,
                     kycVerifiedAt: firebase.firestore.FieldValue.serverTimestamp()
                 });
-                showMessage('Customer KYC marked as verified.');
+                batch.update(db.collection('loans').doc(loanId), {
+                    documentsReviewed: true,
+                    documentsReviewedBy: currentAdmin.uid,
+                    documentsReviewedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                    documentsReviewedAtISO: new Date().toISOString()
+                });
+                await batch.commit();
+                showMessage('Documents reviewed and customer KYC verified. Approval is now available.');
             } catch (error) {
                 showMessage(error.message || 'KYC status could not be updated.', true);
             }

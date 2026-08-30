@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <base target="_top">
+  <style>
+    :root {
+      --green-950: #082c21;
+      --green-800: #14523d;
+      --green-100: #dff2e9;
+      --green-50: #f1faf6;
+      --ink: #17231f;
+      --muted: #66746e;
+      --line: #dfe7e3;
+      --danger: #b42318;
+      --danger-soft: #fff0ef;
+      --success: #18794e;
+      --success-soft: #e8f7ef;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      padding: 16px;
+      color: var(--ink);
+      background: #fff;
+      font-family: Inter, Arial, sans-serif;
+      line-height: 1.45;
+    }
+
+    .intro h2 {
+      margin: 0;
+      color: var(--green-950);
+      font-size: 1rem;
+    }
+
+    .intro p {
+      margin: 5px 0 0;
+      color: var(--muted);
+      font-size: 0.78rem;
+    }
+
+    .upload-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    .file-box {
+      display: flex;
+      min-height: 132px;
+      flex-direction: column;
+      justify-content: center;
+      padding: 13px;
+      border: 1.5px dashed #91b9a8;
+      border-radius: 12px;
+      background: var(--green-50);
+      cursor: pointer;
+      text-align: center;
+    }
+
+    .file-box:focus-within {
+      border-color: var(--green-800);
+      outline: 3px solid rgba(20, 82, 61, 0.12);
+    }
+
+    .file-title {
+      color: var(--green-950);
+      font-size: 0.78rem;
+      font-weight: 800;
+    }
+
+    .file-name {
+      overflow-wrap: anywhere;
+      margin-top: 5px;
+      color: var(--muted);
+      font-size: 0.68rem;
+    }
+
+    input[type="file"] {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+    }
+
+    .message {
+      min-height: 42px;
+      margin-top: 13px;
+      padding: 11px 12px;
+      border: 1px solid var(--line);
+      border-radius: 11px;
+      color: var(--muted);
+      background: #f8faf9;
+      font-size: 0.76rem;
+    }
+
+    .message.error {
+      color: var(--danger);
+      border-color: #f5c6c2;
+      background: var(--danger-soft);
+    }
+
+    .message.success {
+      color: var(--success);
+      border-color: #bce6cf;
+      background: var(--success-soft);
+    }
+
+    button {
+      width: 100%;
+      min-height: 44px;
+      margin-top: 12px;
+      padding: 11px 15px;
+      border: 0;
+      border-radius: 11px;
+      color: #fff;
+      background: var(--green-800);
+      font: inherit;
+      font-size: 0.82rem;
+      font-weight: 800;
+      cursor: pointer;
+    }
+
+    button:disabled { cursor: wait; opacity: 0.6; }
+
+    .privacy-note {
+      margin-top: 10px;
+      color: var(--muted);
+      font-size: 0.68rem;
+      text-align: center;
+    }
+
+    @media (max-width: 580px) {
+      .upload-grid { grid-template-columns: 1fr; }
+      .file-box { min-height: 92px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="intro">
+    <h2>Private document upload</h2>
+    <p>Select one clear file for each item. PDF, JPG and PNG files are accepted, up to <?= maximumFileSizeMb ?> MB each.</p>
+  </div>
+
+  <form id="uploadForm">
+    <input name="idToken" id="idToken" type="hidden">
+    <input name="userId" id="userId" type="hidden">
+    <input name="email" id="email" type="hidden">
+    <input name="fullName" id="fullName" type="hidden">
+    <input name="employeeNumber" id="employeeNumber" type="hidden">
+    <input name="nrcNumber" id="nrcNumber" type="hidden">
+    <input name="applicationNumber" id="applicationNumber" type="hidden">
+    <input name="loanId" id="loanId" type="hidden">
+    <input name="parentOrigin" id="parentOrigin" type="hidden">
+
+    <div class="upload-grid">
+      <label class="file-box" for="nrcFront">
+        <span class="file-title">1. NRC front</span>
+        <span id="nrcFrontName" class="file-name">Choose file</span>
+        <input name="nrcFront" id="nrcFront" type="file" accept="application/pdf,image/jpeg,image/png" required>
+      </label>
+      <label class="file-box" for="nrcBack">
+        <span class="file-title">2. NRC back</span>
+        <span id="nrcBackName" class="file-name">Choose file</span>
+        <input name="nrcBack" id="nrcBack" type="file" accept="application/pdf,image/jpeg,image/png" required>
+      </label>
+      <label class="file-box" for="payslip">
+        <span class="file-title">3. Recent payslip</span>
+        <span id="payslipName" class="file-name">Choose file</span>
+        <input name="payslip" id="payslip" type="file" accept="application/pdf,image/jpeg,image/png" required>
+      </label>
+    </div>
+
+    <div id="status" class="message" role="status" aria-live="polite">All three documents are required.</div>
+    <button id="uploadButton" type="submit">Upload documents securely</button>
+    <p class="privacy-note">Files are stored in the administrator's restricted Google Drive folder and are not uploaded to Firebase Storage.</p>
+  </form>
+
+  <script>
+    'use strict';
+
+    const UPLOAD_CHANNEL = <?!= channelJson ?>;
+    const ALLOWED_PARENT_ORIGINS = <?!= allowedOriginsJson ?>;
+    const MAXIMUM_FILE_SIZE_BYTES = Number(<?= maximumFileSizeMb ?>) * 1024 * 1024;
+    const form = document.getElementById('uploadForm');
+    const statusElement = document.getElementById('status');
+    const uploadButton = document.getElementById('uploadButton');
+    let approvedParentOrigin = '';
+    let waitingForContext = false;
+
+    function postToHost(message, targetOrigin) {
+      const host = window.top !== window ? window.top : window.parent;
+      host.postMessage({ ...message, channel: UPLOAD_CHANNEL }, targetOrigin || '*');
+    }
+
+    function setStatus(text, type) {
+      statusElement.className = `message${type ? ` ${type}` : ''}`;
+      statusElement.textContent = text;
+      notifyResize();
+    }
+
+    function notifyResize() {
+      window.setTimeout(function () {
+        postToHost({
+          type: 'moneytree-upload-resize',
+          height: document.documentElement.scrollHeight + 8
+        }, approvedParentOrigin || '*');
+      }, 0);
+    }
+
+    function validateFiles() {
+      const inputs = ['nrcFront', 'nrcBack', 'payslip'].map(function (id) {
+        return document.getElementById(id);
+      });
+      for (const input of inputs) {
+        const file = input.files && input.files[0];
+        if (!file) throw new Error('Select all three required documents.');
+        if (file.size > MAXIMUM_FILE_SIZE_BYTES) {
+          throw new Error(`${file.name} is larger than <?= maximumFileSizeMb ?> MB.`);
+        }
+        const allowed = ['application/pdf', 'image/jpeg', 'image/png'];
+        if (allowed.indexOf(file.type) === -1) {
+          throw new Error(`${file.name} must be a PDF, JPG or PNG file.`);
+        }
+      }
+    }
+
+    function submitToServer() {
+      waitingForContext = false;
+      setStatus('Uploading and verifying your documents…', '');
+      uploadButton.disabled = true;
+      uploadButton.textContent = 'Uploading…';
+      google.script.run
+        .withSuccessHandler(function (result) {
+          uploadButton.disabled = false;
+          uploadButton.textContent = 'Upload documents again';
+          setStatus(`Upload complete. Receipt ${result.receiptId}.`, 'success');
+          postToHost({ type: 'moneytree-upload-complete', payload: result }, approvedParentOrigin);
+        })
+        .withFailureHandler(function (error) {
+          uploadButton.disabled = false;
+          uploadButton.textContent = 'Try upload again';
+          const errorMessage = error && error.message ? error.message : 'The upload failed.';
+          setStatus(errorMessage, 'error');
+          postToHost({ type: 'moneytree-upload-error', message: errorMessage }, approvedParentOrigin || '*');
+        })
+        .processLoanDocuments(form);
+    }
+
+    form.addEventListener('submit', function (event) {
+      event.preventDefault();
+      if (waitingForContext || uploadButton.disabled) return;
+      try {
+        validateFiles();
+      } catch (error) {
+        setStatus(error.message, 'error');
+        return;
+      }
+      waitingForContext = true;
+      setStatus('Verifying your Money Tree login…', '');
+      postToHost({ type: 'moneytree-request-upload-context' }, '*');
+    });
+
+    ['nrcFront', 'nrcBack', 'payslip'].forEach(function (id) {
+      document.getElementById(id).addEventListener('change', function (event) {
+        const file = event.target.files && event.target.files[0];
+        document.getElementById(`${id}Name`).textContent = file ? file.name : 'Choose file';
+        notifyResize();
+      });
+    });
+
+    window.addEventListener('message', function (event) {
+      const data = event.data || {};
+      if (data.channel !== UPLOAD_CHANNEL || ALLOWED_PARENT_ORIGINS.indexOf(event.origin) === -1) return;
+
+      if (data.type === 'moneytree-upload-context-error') {
+        waitingForContext = false;
+        setStatus(data.message || 'The application details are incomplete.', 'error');
+        return;
+      }
+
+      if (data.type !== 'moneytree-upload-context' || !data.payload) return;
+      approvedParentOrigin = event.origin;
+      const payload = data.payload;
+      [
+        'idToken',
+        'userId',
+        'email',
+        'fullName',
+        'employeeNumber',
+        'nrcNumber',
+        'applicationNumber',
+        'loanId',
+        'parentOrigin'
+      ].forEach(function (key) {
+        document.getElementById(key).value = payload[key] == null ? '' : String(payload[key]);
+      });
+      submitToServer();
+    });
+
+    window.addEventListener('load', function () {
+      postToHost({ type: 'moneytree-upload-ready' }, '*');
+      notifyResize();
+    });
+  </script>
+</body>
+</html>

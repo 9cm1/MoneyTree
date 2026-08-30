@@ -96,6 +96,7 @@
             const loan = loanData;
             const acceptedTerms = acceptanceData?.acceptedTerms || null;
             const terms = acceptedTerms || loan.contractTerms || {};
+            const affordability = terms.affordability || null;
             const contractLoan = { ...loan, ...terms, contractTerms: terms };
             const summary = MoneyTreeLoans.loanSummary(contractLoan);
             const borrowerName = loan.fullName || profileData.fullName || currentUser.displayName || 'Money Tree customer';
@@ -192,10 +193,27 @@
                     <p><strong>Borrower:</strong> ${borrower}</p>
                     <p><strong>Date of birth:</strong> ${MoneyTreeLoans.escapeHtml(loan.dateOfBirth || 'Not provided')}</p>
                     <p><strong>NRC:</strong> ${MoneyTreeLoans.escapeHtml(MoneyTreeLoans.maskNrc(loan.nrcNumber))}</p>
+                    <p><strong>Civil-service employee number:</strong> ${MoneyTreeLoans.escapeHtml(loan.employeeNumber || 'Not provided')}</p>
                     <p><strong>Mobile number:</strong> ${MoneyTreeLoans.escapeHtml(loan.mobileMoney || 'Not provided')}</p>
                     <p><strong>Authenticated email:</strong> ${MoneyTreeLoans.escapeHtml(email)}</p>
                     <p><strong>Loan purpose:</strong> ${MoneyTreeLoans.escapeHtml(loan.purpose || 'Not provided')}</p>
                 </section>
+
+                ${affordability ? `
+                    <section class="document-section">
+                        <h3>Payroll affordability assessment</h3>
+                        <div class="document-grid">
+                            <div class="detail-row"><span>Basic monthly salary</span><strong>${MoneyTreeLoans.money(affordability.basicSalary)}</strong></div>
+                            <div class="detail-row"><span>Existing monthly deductions</span><strong>${MoneyTreeLoans.money(affordability.existingDeductions)}</strong></div>
+                            <div class="detail-row"><span>Minimum salary that must remain (40%)</span><strong>${MoneyTreeLoans.money(affordability.minimumSalaryRemaining)}</strong></div>
+                            <div class="detail-row"><span>Available new payroll deduction</span><strong>${MoneyTreeLoans.money(affordability.availableMonthlyDeduction)}</strong></div>
+                            <div class="detail-row"><span>Maximum affordable loan</span><strong>${MoneyTreeLoans.money(affordability.maximumAffordableLoan)}</strong></div>
+                            <div class="detail-row"><span>Highest proposed payroll deduction</span><strong>${MoneyTreeLoans.money(affordability.projectedPayrollDeduction)}</strong></div>
+                            <div class="detail-row"><span>Projected salary remaining</span><strong>${MoneyTreeLoans.money(affordability.projectedSalaryAfterDeductions)}</strong></div>
+                            <div class="detail-row"><span>Assessment</span><strong>${affordability.affordabilityStatus === 'within-limit' ? 'Within 40% retention limit' : 'Exceeds limit'}</strong></div>
+                        </div>
+                    </section>
+                ` : ''}
 
                 <section class="document-section">
                     <h3>Client instructions and information</h3>

@@ -1,0 +1,64 @@
+MONEY TREE - CIVIL SERVANT DOCUMENT UPDATE
+==========================================
+
+WHAT NOW WORKS
+--------------
+- Borrower enters a civil-service employee number.
+- NRC front, NRC back and recent payslip are mandatory.
+- The files go to a private Google Drive folder owned by the administrator.
+- Firebase Storage is not used and no Firebase Storage billing account is required.
+- Admin sees an Open private documents button and can view/download all three files.
+- Admin must confirm the document/KYC review before the Approve button appears.
+- The existing 40% salary-retention calculation, payroll-deduction requirement, contract acceptance and disbursement lock remain active.
+
+DO THESE STEPS IN THIS ORDER
+----------------------------
+
+1. PRIVATE DOCUMENT RECEIVER - COMPLETED
+   The Google Apps Script receiver has been deployed from the administrator's account.
+   The private Drive folder was created successfully.
+
+2. RECEIVER CONNECTION - COMPLETED
+   config.js already contains the deployed Web App URL ending in /exec.
+   Do not replace it with the deployment ID or a /dev URL.
+
+3. UPDATE GITHUB
+   Upload every file and folder in this package to the ROOT of the existing MoneyTree repository.
+   Replace the old files and keep every filename unchanged.
+   The landing page must remain index.html.
+
+4. PUBLISH FIRESTORE RULES
+   Uploading firestore.rules to GitHub does not activate it.
+   In Firebase Console open Firestore Database > Rules, paste firestore.rules and click Publish.
+
+5. TEST WITH TWO ACCOUNTS
+   Borrower account:
+   - Enter employee number.
+   - Upload NRC front, NRC back and recent payslip.
+   - Submit the application.
+
+   Admin account:
+   - Open private documents.
+   - Check that all three files match the application.
+   - Click Confirm documents and KYC.
+   - Enter payslip salary/deductions and run the 40% affordability calculation.
+   - Approve only an affordable amount.
+
+   Borrower account:
+   - Review the KFS, repayment plan and contract.
+   - Accept the exact approved terms.
+
+   Admin account:
+   - Confirm the acceptance receipt appears before disbursement.
+
+SECURITY RULES
+--------------
+- Keep the Drive folder set to Restricted.
+- Share it only with named administrators.
+- Never choose Anyone with the link for the Drive folder.
+- Do not email or send NRC/payslip files through WhatsApp as a fallback.
+- Agree on a privacy notice, retention period and deletion procedure before using real customer documents.
+
+LIMIT
+-----
+This avoids Firebase Storage billing, but uses the administrator's Google Drive storage and Google Apps Script quotas. It is appropriate for a controlled prototype or modest number of applications, not unlimited production traffic.

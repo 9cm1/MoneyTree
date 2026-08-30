@@ -8,13 +8,14 @@
         monthlyInterestRate: 0.02,
         arrangementFee: 0,
         monthlyAdminFee: 0,
-        repaymentMethod: 'Manual payment',
-        paymentFrequency: 'Monthly'
+        repaymentMethod: 'Payroll deduction',
+        paymentFrequency: 'Monthly',
+        salaryRetentionRate: 0.40
     });
 
     // Increase this value whenever the client approves new contract wording.
     // Acceptance records retain the version that the borrower reviewed.
-    const CONTRACT_VERSION = 'MT-PROTOTYPE-CONTRACT-V1';
+    const CONTRACT_VERSION = 'MT-PROTOTYPE-CONTRACT-V3';
 
     function number(value, fallback = 0) {
         const parsed = Number(value);
@@ -148,7 +149,7 @@
         );
         if (amountToReceive <= 0) throw new Error('Amount to receive must be greater than zero.');
 
-        return {
+        const terms = {
             currency: 'ZMW',
             approvedAmount: roundMoney(schedule.principal),
             amountToReceive,
@@ -174,6 +175,133 @@
                 interest: roundMoney(item.interest),
                 fees: roundMoney(item.fees)
             }))
+        };
+
+        if (options.affordability) {
+            terms.affordability = {
+                basicSalary: roundMoney(options.affordability.basicSalary),
+                existingDeductions: roundMoney(options.affordability.existingDeductions),
+                salaryRetentionRate: number(
+                    options.affordability.salaryRetentionRate,
+                    TEMP_RULES.salaryRetentionRate
+                ),
+                minimumSalaryRemaining: roundMoney(options.affordability.minimumSalaryRemaining),
+                maximumTotalDeductions: roundMoney(options.affordability.maximumTotalDeductions),
+                availableMonthlyDeduction: roundMoney(options.affordability.availableMonthlyDeduction),
+                maximumAffordableLoan: roundMoney(options.affordability.maximumAffordableLoan),
+                projectedPayrollDeduction: roundMoney(options.affordability.projectedPayrollDeduction),
+                projectedSalaryAfterDeductions: roundMoney(options.affordability.projectedSalaryAfterDeductions),
+                affordabilityStatus: options.affordability.affordabilityStatus || 'not-evaluated'
+            };
+        }
+
+        return terms;
+    }
+
+    function calculateSalaryCapacity(options) {
+        const basicSalary = roundMoney(options.basicSalary);
+        const existingDeductions = roundMoney(options.existingDeductions);
+        const salaryRetentionRate = Math.min(1, Math.max(
+            0,
+            number(options.salaryRetentionRate, TEMP_RULES.salaryRetentionRate)
+        ));
+
+        if (basicSalary <= 0) throw new Error('Basic salary must be greater than zero.');
+        if (existingDeductions < 0) throw new Error('Existing deductions cannot be negative.');
+
+        const minimumSalaryRemaining = roundMoney(basicSalary * salaryRetentionRate);
+        const maximumTotalDeductions = roundMoney(basicSalary - minimumSalaryRemaining);
+        const availableMonthlyDeduction = Math.max(
+            0,
+            roundMoney(maximumTotalDeductions - existingDeductions)
+        );
+
+        return {
+            basicSalary,
+            existingDeductions,
+            salaryRetentionRate,
+            minimumSalaryRemaining,
+            maximumTotalDeductions,
+            availableMonthlyDeduction,
+            currentSalaryAfterDeductions: roundMoney(basicSalary - existingDeductions)
+        };
+    }
+
+    function maximumAffordablePrincipal(options) {
+        const availableMonthlyDeduction = roundMoney(options.availableMonthlyDeduction);
+        const termMonths = Math.max(1, Math.round(number(options.termMonths, 1)));
+        const monthlyAdminFee = Math.max(0, roundMoney(options.monthlyAdminFee));
+        const arrangementFee = Math.max(0, roundMoney(options.arrangementFee));
+
+        if (availableMonthlyDeduction <= 0) return 0;
+        if (monthlyAdminFee + arrangementFee > availableMonthlyDeduction) return 0;
+
+        let low = 1;
+        let high = Math.max(1, Math.floor(availableMonthlyDeduction * termMonths * 100));
+        let best = 0;
+
+        while (low <= high) {
+            const midpoint = Math.floor((low + high) / 2);
+            const principal = midpoint / 100;
+            const schedule = calculateSchedule({
+                principal,
+                termMonths,
+                monthlyInterestRate: options.monthlyInterestRate,
+                arrangementFee,
+                monthlyAdminFee,
+                firstPaymentDate: options.firstPaymentDate
+            });
+            const fits = schedule.installments.every(item => (
+                roundMoney(item.amount) <= availableMonthlyDeduction
+            ));
+
+            if (fits) {
+                best = midpoint;
+                low = midpoint + 1;
+            } else {
+                high = midpoint - 1;
+            }
+        }
+
+        return roundMoney(best / 100);
+    }
+
+    function evaluateAffordability(options) {
+        const capacity = calculateSalaryCapacity(options);
+        const approvedAmount = roundMoney(options.approvedAmount);
+        const maximumAffordableLoan = maximumAffordablePrincipal({
+            ...options,
+            availableMonthlyDeduction: capacity.availableMonthlyDeduction
+        });
+
+        let projectedPayrollDeduction = 0;
+        if (approvedAmount > 0) {
+            const proposedSchedule = calculateSchedule({
+                principal: approvedAmount,
+                termMonths: options.termMonths,
+                monthlyInterestRate: options.monthlyInterestRate,
+                arrangementFee: options.arrangementFee,
+                monthlyAdminFee: options.monthlyAdminFee,
+                firstPaymentDate: options.firstPaymentDate
+            });
+            projectedPayrollDeduction = roundMoney(Math.max(
+                ...proposedSchedule.installments.map(item => item.amount)
+            ));
+        }
+
+        const withinLimit = approvedAmount > 0
+            && approvedAmount <= maximumAffordableLoan
+            && projectedPayrollDeduction <= capacity.availableMonthlyDeduction;
+
+        return {
+            ...capacity,
+            maximumAffordableLoan,
+            projectedPayrollDeduction,
+            projectedSalaryAfterDeductions: roundMoney(
+                capacity.basicSalary - capacity.existingDeductions - projectedPayrollDeduction
+            ),
+            affordabilityStatus: withinLimit ? 'within-limit' : 'exceeds-limit',
+            withinLimit
         };
     }
 
@@ -312,6 +440,9 @@
         addMonths,
         calculateSchedule,
         buildContractTerms,
+        calculateSalaryCapacity,
+        maximumAffordablePrincipal,
+        evaluateAffordability,
         applyPayment,
         loanSummary,
         installmentView,

@@ -11,6 +11,10 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
 
+    function borrowerKycVerified(userId) {
+      return get(/databases/$(database)/documents/users/$(userId)).data.kycStatus == 'verified';
+    }
+
     function ownsLoan(loanId) {
       return signedIn()
         && get(/databases/$(database)/documents/loans/$(loanId)).data.userId == request.auth.uid;
@@ -37,6 +41,7 @@ service cloud.firestore {
         && request.resource.data.fullName == resource.data.fullName
         && request.resource.data.dateOfBirth == resource.data.dateOfBirth
         && request.resource.data.nrcNumber == resource.data.nrcNumber
+        && request.resource.data.get('employeeNumber', null) == resource.data.get('employeeNumber', null)
         && request.resource.data.mobileMoney == resource.data.mobileMoney
         && request.resource.data.purpose == resource.data.purpose
         && request.resource.data.approvedAmount == resource.data.approvedAmount
@@ -53,6 +58,23 @@ service cloud.firestore {
         && request.resource.data.installmentAmount == resource.data.installmentAmount
         && request.resource.data.repaymentMethod == resource.data.repaymentMethod
         && request.resource.data.paymentFrequency == resource.data.paymentFrequency
+        && request.resource.data.get('basicSalary', null) == resource.data.get('basicSalary', null)
+        && request.resource.data.get('existingDeductions', null) == resource.data.get('existingDeductions', null)
+        && request.resource.data.get('salaryRetentionRate', null) == resource.data.get('salaryRetentionRate', null)
+        && request.resource.data.get('minimumSalaryRemaining', null) == resource.data.get('minimumSalaryRemaining', null)
+        && request.resource.data.get('maximumTotalDeductions', null) == resource.data.get('maximumTotalDeductions', null)
+        && request.resource.data.get('availableMonthlyDeduction', null) == resource.data.get('availableMonthlyDeduction', null)
+        && request.resource.data.get('maximumAffordableLoan', null) == resource.data.get('maximumAffordableLoan', null)
+        && request.resource.data.get('projectedPayrollDeduction', null) == resource.data.get('projectedPayrollDeduction', null)
+        && request.resource.data.get('projectedSalaryAfterDeductions', null) == resource.data.get('projectedSalaryAfterDeductions', null)
+        && request.resource.data.get('affordabilityStatus', null) == resource.data.get('affordabilityStatus', null)
+        && request.resource.data.get('documentsUploaded', null) == resource.data.get('documentsUploaded', null)
+        && request.resource.data.get('documentsReviewed', null) == resource.data.get('documentsReviewed', null)
+        && request.resource.data.get('documentStorage', null) == resource.data.get('documentStorage', null)
+        && request.resource.data.get('documentFolderId', null) == resource.data.get('documentFolderId', null)
+        && request.resource.data.get('documentUploadReceipt', null) == resource.data.get('documentUploadReceipt', null)
+        && request.resource.data.get('documentUploadedAtISO', null) == resource.data.get('documentUploadedAtISO', null)
+        && request.resource.data.get('documentNames', null) == resource.data.get('documentNames', null)
         && request.resource.data.firstPaymentDate == resource.data.firstPaymentDate
         && request.resource.data.loanEndDate == resource.data.loanEndDate
         && request.resource.data.contractVersion == resource.data.contractVersion
@@ -91,12 +113,34 @@ service cloud.firestore {
         && request.resource.data.status == 'pending'
         && request.resource.data.amount > 0
         && request.resource.data.totalPaid == 0
+        && request.resource.data.employeeNumber is string
+        && request.resource.data.employeeNumber.matches('^[A-Za-z0-9 /_-]{2,40}$')
+        && request.resource.data.documentsUploaded == true
+        && request.resource.data.documentsReviewed == false
+        && request.resource.data.documentStorage == 'google-drive-private'
+        && request.resource.data.documentFolderId is string
+        && request.resource.data.documentFolderId.matches('^[A-Za-z0-9_-]{10,200}$')
+        && request.resource.data.documentUploadReceipt is string
+        && request.resource.data.documentUploadReceipt.matches('^[A-Za-z0-9-]{10,100}$')
+        && request.resource.data.documentUploadedAtISO is string
+        && request.resource.data.documentNames.keys().hasOnly([
+          'nrcFront',
+          'nrcBack',
+          'payslip'
+        ])
+        && request.resource.data.documentNames.nrcFront is string
+        && request.resource.data.documentNames.nrcFront.size() > 0
+        && request.resource.data.documentNames.nrcBack is string
+        && request.resource.data.documentNames.nrcBack.size() > 0
+        && request.resource.data.documentNames.payslip is string
+        && request.resource.data.documentNames.payslip.size() > 0
         && request.resource.data.keys().hasOnly([
           'userId',
           'applicationNumber',
           'fullName',
           'dateOfBirth',
           'nrcNumber',
+          'employeeNumber',
           'mobileMoney',
           'amount',
           'requestedTermMonths',
@@ -106,6 +150,11 @@ service cloud.firestore {
           'totalPaid',
           'temporaryPolicy',
           'documentsUploaded',
+          'documentsReviewed',
+          'documentStorage',
+          'documentFolderId',
+          'documentUploadReceipt',
+          'documentUploadedAtISO',
           'documentNames',
           'createdAt',
           'createdAtISO'
@@ -113,6 +162,13 @@ service cloud.firestore {
 
       allow update: if isAdmin()
         && loanStatusTransitionAllowed(loanId)
+        && (request.resource.data.status != 'approved'
+          || (request.resource.data.repaymentMethod == 'Payroll deduction'
+            && request.resource.data.documentsUploaded == true
+            && request.resource.data.documentsReviewed == true
+            && request.resource.data.documentStorage == 'google-drive-private'
+            && request.resource.data.documentFolderId.matches('^[A-Za-z0-9_-]{10,200}$')
+            && borrowerKycVerified(request.resource.data.userId)))
         && (!hasAcceptance(loanId) || acceptedIdentityAndTermsUnchanged())
         && (!(resource.data.status == 'approved' && request.resource.data.status == 'active')
           || request.resource.data.disbursedAmount == resource.data.amountToReceive);

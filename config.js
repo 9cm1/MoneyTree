@@ -11,6 +11,13 @@ const firebaseConfig = {
     appId: "1:360207414093:web:9f6dc2743200b3fbf83d04"
 };
 
+// Private supporting documents are uploaded to the administrator-owned
+// Google Apps Script web app. This must remain the deployed /exec URL.
+const documentUploadConfig = Object.freeze({
+    webAppUrl: "https://script.google.com/macros/s/AKfycbzaYWrlcwTffYn1P9lhaks33c011owRJTZ9h6vDPRP3LkRtdpMG6A-nIp2igJKqog7Xwg/exec",
+    maximumFileSizeMb: 5
+});
+
 if (!firebase.apps.length) {
     firebase.initializeApp(firebaseConfig);
 }
@@ -21,3 +28,4 @@ const db = firebase.firestore();
 window.auth = auth;
 window.db = db;
 window.firebase = firebase;
+window.documentUploadConfig = documentUploadConfig;
