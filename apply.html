@@ -24,7 +24,7 @@
 
         <section class="page-content">
             <div class="draft-banner">
-                <strong>Civil-servant loan application:</strong> an employee number, NRC front, NRC back and recent payslip are required. Final interest, fees and approval conditions remain subject to client confirmation.
+                <strong>Civil-servant loan application:</strong> an employee number, NRC front, NRC back and recent payslip are required. After submission, the approval review takes up to 48 hours.
             </div>
 
             <div id="message" class="message-space" role="status" aria-live="polite"></div>
@@ -85,19 +85,6 @@
                 </section>
 
                 <section class="form-section">
-                    <h3><i class="far fa-folder-open"></i> Supporting documents</h3>
-                    <div class="notice">
-                        Upload a clear NRC front, NRC back and recent payslip. The files go to the administrator's <strong>private Google Drive</strong>, not Firebase Storage. Only authorised administrators should have access to that Drive folder.
-                    </div>
-                    <div id="documentUploadStatus" class="notice section-gap" role="status" aria-live="polite">
-                        Connecting to the private document receiver…
-                    </div>
-                    <iframe id="documentUploadFrame" class="document-upload-frame section-gap" title="Secure NRC and payslip upload" loading="lazy" hidden></iframe>
-                    <small class="document-upload-help">Accepted: PDF, JPG or PNG. Maximum 5 MB per file. All three documents are required before the application can be submitted.</small>
-                    <noscript><div class="error-box section-gap">JavaScript is required to upload the supporting documents.</div></noscript>
-                </section>
-
-                <section class="form-section">
                     <div class="field">
                         <label style="display:flex;gap:10px;align-items:flex-start;font-weight:600;">
                             <input id="consent" type="checkbox" style="width:auto;min-height:0;margin-top:3px;" required />
@@ -106,8 +93,21 @@
                     </div>
                 </section>
 
-                <button id="submitBtn" class="btn btn-primary btn-block section-gap" type="submit">
-                    <i class="fas fa-paper-plane"></i> Submit application
+                <section class="form-section">
+                    <h3><i class="far fa-folder-open"></i> Final step: submit documents</h3>
+                    <div class="notice">
+                        Upload a clear NRC front, NRC back and recent payslip. The files go to the administrator's <strong>private Google Drive</strong>, not Firebase Storage. When the upload finishes, your loan application will be submitted automatically.
+                    </div>
+                    <div id="documentUploadStatus" class="notice section-gap" role="status" aria-live="polite">
+                        Connecting to the private document receiver…
+                    </div>
+                    <iframe id="documentUploadFrame" class="document-upload-frame section-gap" title="Secure NRC and payslip upload" loading="lazy" hidden></iframe>
+                    <small class="document-upload-help">Complete every field and the consent above first. Accepted: PDF, JPG or PNG. Maximum 5 MB per file.</small>
+                    <noscript><div class="error-box section-gap">JavaScript is required to upload the supporting documents.</div></noscript>
+                </section>
+
+                <button id="submitBtn" class="btn btn-primary btn-block section-gap hide" type="submit">
+                    <i class="fas fa-rotate-right"></i> Retry saving application
                 </button>
             </form>
         </section>
@@ -129,6 +129,7 @@
         let pendingApplicationNumber = '';
         let documentReceipt = null;
         let uploadChannel = '';
+        let applicationSubmitting = false;
         const form = document.getElementById('loanForm');
         const submitButton = document.getElementById('submitBtn');
         const message = document.getElementById('message');
@@ -138,6 +139,11 @@
         function setUploadStatus(type, text) {
             uploadStatus.className = `${type} section-gap`;
             uploadStatus.textContent = text;
+        }
+
+        function showApplicationMessage(type, text) {
+            message.className = `${type} section-gap`;
+            message.textContent = text;
         }
 
         function createUploadChannel() {
@@ -231,11 +237,11 @@
                     }, event.origin);
                     return;
                 }
-                if (!identity.fullName || !identity.employeeNumber || !identity.nrcNumber) {
+                if (!form.reportValidity()) {
                     event.source?.postMessage({
                         type: 'moneytree-upload-context-error',
                         channel: uploadChannel,
-                        message: 'Enter your full name, employee number and NRC number above before uploading.'
+                        message: 'Complete every application field and accept the consent statement before uploading.'
                     }, event.origin);
                     return;
                 }
@@ -274,7 +280,8 @@
                     return;
                 }
                 documentReceipt = receipt;
-                setUploadStatus('success-box', `Documents received securely for ${receipt.applicationNumber}. You can now submit the loan application.`);
+                setUploadStatus('success-box', `Documents received securely for ${receipt.applicationNumber}. Saving your loan application now…`);
+                form.requestSubmit();
                 return;
             }
 
@@ -288,6 +295,7 @@
             document.getElementById(id).addEventListener('input', () => {
                 if (documentReceipt && !receiptMatchesCurrentApplication(documentReceipt)) {
                     documentReceipt = null;
+                    submitButton.classList.add('hide');
                     setUploadStatus('notice', 'Your identity details changed after upload. Upload all three documents again so the receipt matches this application.');
                 }
             });
@@ -319,7 +327,9 @@
 
         form.addEventListener('submit', async event => {
             event.preventDefault();
+            if (applicationSubmitting) return;
             message.textContent = '';
+            message.className = 'message-space';
             if (!currentUser || !pendingLoanRef) return;
 
             if (!form.reportValidity()) return;
@@ -334,24 +344,25 @@
             const purpose = document.getElementById('purpose').value.trim();
 
             if (amount < 50) {
-                message.textContent = 'The requested amount must be at least K50.';
-                message.style.color = '#b42318';
+                showApplicationMessage('error-box', 'The requested amount must be at least K50.');
                 return;
             }
             if (!receiptMatchesCurrentApplication(documentReceipt)) {
-                message.textContent = 'Upload the NRC front, NRC back and recent payslip before submitting the application.';
-                message.style.color = '#b42318';
+                showApplicationMessage('error-box', 'Upload the NRC front, NRC back and recent payslip before submitting the application.');
                 uploadStatus.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 return;
             }
 
+            applicationSubmitting = true;
+            submitButton.classList.remove('hide');
             submitButton.disabled = true;
             submitButton.innerHTML = '<i class="fas fa-circle-notch spin"></i> Submitting…';
+            setUploadStatus('notice', 'Documents received. Creating your loan application record…');
 
             try {
                 const loanRef = pendingLoanRef;
                 const applicationNumber = pendingApplicationNumber;
-                await loanRef.set({
+                const loanRecord = {
                     userId: currentUser.uid,
                     applicationNumber,
                     fullName,
@@ -379,19 +390,46 @@
                     },
                     createdAt: firebase.firestore.FieldValue.serverTimestamp(),
                     createdAtISO: new Date().toISOString()
-                });
+                };
 
-                await db.collection('users').doc(currentUser.uid).set({
-                    fullName,
-                    phoneNumber: mobileMoney,
-                    nrcNumber,
-                    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-                }, { merge: true });
+                try {
+                    await loanRef.set(loanRecord);
+                } catch (writeError) {
+                    // If the browser lost the response after Firestore committed,
+                    // recognise the matching record instead of creating a duplicate.
+                    try {
+                        const existingSnapshot = await loanRef.get();
+                        const existing = existingSnapshot.exists ? existingSnapshot.data() : null;
+                        if (!existing || existing.userId !== currentUser.uid
+                            || existing.documentUploadReceipt !== documentReceipt.receiptId) {
+                            throw writeError;
+                        }
+                    } catch (verificationError) {
+                        throw writeError;
+                    }
+                }
+
+                const savedSnapshot = await loanRef.get();
+                if (!savedSnapshot.exists) {
+                    throw new Error('The application record could not be confirmed. Please retry.');
+                }
+
+                try {
+                    await db.collection('users').doc(currentUser.uid).set({
+                        fullName,
+                        phoneNumber: mobileMoney,
+                        nrcNumber,
+                        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                    }, { merge: true });
+                } catch (profileError) {
+                    console.warn('The application was saved, but the profile refresh failed:', profileError);
+                }
 
                 form.innerHTML = `
                     <div class="success-box">
                         <strong>Application and documents submitted</strong><br />
-                        Your application number is ${MoneyTreeLoans.escapeHtml(applicationNumber)}. The administrator can now review your private documents and assess the payroll-deduction limit.
+                        Your application number is ${MoneyTreeLoans.escapeHtml(applicationNumber)}. The administrator can now review your private documents and assess the payroll-deduction limit.<br /><br />
+                        <strong>Approval review takes up to 48 hours.</strong> Track the application from your dashboard.
                     </div>
                     <div class="action-row">
                         <a class="btn btn-primary" href="order.html?loan=${encodeURIComponent(loanRef.id)}">Track application</a>
@@ -400,11 +438,19 @@
                 `;
             } catch (error) {
                 console.error('Application error:', error);
+                applicationSubmitting = false;
                 const receiptReference = documentReceipt?.receiptId ? ` Upload receipt: ${documentReceipt.receiptId}.` : '';
-                message.textContent = `${error.message || 'The application could not be submitted.'}${receiptReference}`;
-                message.style.color = '#b42318';
+                const permissionDenied = error?.code === 'permission-denied'
+                    || /permission/i.test(error?.message || '');
+                const explanation = permissionDenied
+                    ? 'Your documents are safe in Drive, but the loan record was not saved. Publish the latest firestore.rules in Firebase Console, then press Retry saving application. Do not upload the documents again.'
+                    : `${error.message || 'The application record could not be saved. Please retry.'}${receiptReference}`;
+                showApplicationMessage('error-box', explanation);
+                setUploadStatus('error-box', 'Documents uploaded, but the application record still needs to be saved. Use the retry button below.');
                 submitButton.disabled = false;
-                submitButton.innerHTML = '<i class="fas fa-paper-plane"></i> Submit application';
+                submitButton.classList.remove('hide');
+                submitButton.innerHTML = '<i class="fas fa-rotate-right"></i> Retry saving application';
+                submitButton.scrollIntoView({ behavior: 'smooth', block: 'center' });
             }
         });
     </script>

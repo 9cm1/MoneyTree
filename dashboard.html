@@ -130,6 +130,11 @@
                             </div>
                             <span class="status-badge status-${MoneyTreeLoans.escapeHtml(loan.status || 'pending')}">${MoneyTreeLoans.statusLabel(loan.status)}</span>
                         </div>
+                        ${loan.status === 'pending' ? `
+                            <div class="notice section-gap">
+                                <strong>Application received.</strong> Approval review takes up to 48 hours.
+                            </div>
+                        ` : ''}
                         ${['active', 'repaid', 'disbursed'].includes(loan.status) ? `
                             <div class="progress-track" aria-label="Repayment progress">
                                 <div class="progress-fill" style="width:${progress.toFixed(1)}%"></div>

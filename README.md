@@ -21,6 +21,8 @@ Money Tree v2 is a mobile-first loan application prototype built with static HTM
 - Payroll deduction enforced as the repayment method for every newly approved loan.
 - Civil-service employee number required on every new application.
 - Required NRC front, NRC back and recent payslip upload to the administrator's private Google Drive through the supplied Apps Script receiver.
+- Automatic Firestore application-record creation immediately after a verified document upload, with an on-page retry if the record write fails.
+- A visible 48-hour approval-review notice after submission and on pending borrower records.
 - Administrator document-review/download button and KYC gate before loan approval.
 - Safer Firestore rules and output escaping.
 
@@ -63,8 +65,8 @@ firebase deploy --only firestore:rules
 ## Test the contract-acceptance workflow
 
 1. Confirm the configured Apps Script deployment is active and the private Drive folder remains restricted.
-2. Sign in with a separate borrower Google account, enter a civil-service employee number and upload NRC front, NRC back and a recent payslip.
-3. Submit a fresh loan application.
+2. Sign in with a separate borrower Google account and complete every application field and consent confirmation.
+3. Upload NRC front, NRC back and a recent payslip; the verified upload automatically submits the fresh loan application.
 4. Sign in with the administrator account, open `admin.html`, click **Open private documents**, review all three files, then mark KYC verified.
 5. Enter the verified basic salary and existing total deductions, then set the amount to receive, proposed terms and first payment date.
 6. Confirm that the calculator reports **Within the 40% retention limit**. The approval action is blocked if documents/KYC are incomplete or the proposed amount exceeds the calculated maximum affordable loan.

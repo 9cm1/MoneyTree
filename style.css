@@ -1187,11 +1187,15 @@ dialog::backdrop {
     box-shadow: 0 26px 80px rgba(0, 0, 0, 0.25);
 }
 
+.login-brand {
+    text-align: center;
+}
+
 .login-logo {
     display: grid;
     width: 68px;
     height: 68px;
-    margin-bottom: 20px;
+    margin: 0 auto 14px;
     place-items: center;
     border-radius: 22px;
     color: #fff;
@@ -1203,11 +1207,16 @@ dialog::backdrop {
 .login-card h1 {
     color: var(--green-950);
     font-size: 2rem;
+    line-height: 1.15;
 }
 
-.login-card > p {
-    margin-top: 6px;
-    color: var(--muted);
+.login-motto {
+    margin-top: 5px;
+    color: var(--green-700);
+    font-size: 0.86rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
 }
 
 .google-btn {
@@ -1233,6 +1242,7 @@ dialog::backdrop {
 
 .login-terms {
     margin-top: 16px !important;
+    color: var(--muted);
     font-size: 0.72rem;
     text-align: center;
 }

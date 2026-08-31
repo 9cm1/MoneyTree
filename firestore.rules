@@ -111,18 +111,26 @@ service cloud.firestore {
       allow create: if signedIn()
         && request.resource.data.userId == request.auth.uid
         && request.resource.data.status == 'pending'
+        && request.resource.data.applicationNumber is string
+        && request.resource.data.applicationNumber.size() >= 10
+        && request.resource.data.fullName is string
+        && request.resource.data.fullName.size() >= 2
         && request.resource.data.amount > 0
         && request.resource.data.totalPaid == 0
         && request.resource.data.employeeNumber is string
-        && request.resource.data.employeeNumber.matches('^[A-Za-z0-9 /_-]{2,40}$')
+        && request.resource.data.employeeNumber.size() >= 2
+        && request.resource.data.employeeNumber.size() <= 40
         && request.resource.data.documentsUploaded == true
         && request.resource.data.documentsReviewed == false
         && request.resource.data.documentStorage == 'google-drive-private'
         && request.resource.data.documentFolderId is string
-        && request.resource.data.documentFolderId.matches('^[A-Za-z0-9_-]{10,200}$')
+        && request.resource.data.documentFolderId.size() >= 10
+        && request.resource.data.documentFolderId.size() <= 200
         && request.resource.data.documentUploadReceipt is string
-        && request.resource.data.documentUploadReceipt.matches('^[A-Za-z0-9-]{10,100}$')
+        && request.resource.data.documentUploadReceipt.size() >= 10
+        && request.resource.data.documentUploadReceipt.size() <= 100
         && request.resource.data.documentUploadedAtISO is string
+        && request.resource.data.documentNames is map
         && request.resource.data.documentNames.keys().hasOnly([
           'nrcFront',
           'nrcBack',

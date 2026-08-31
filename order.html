@@ -122,6 +122,7 @@
                                 </div>
                                 <span class="status-badge status-${MoneyTreeLoans.escapeHtml(loan.status || 'pending')}">${MoneyTreeLoans.statusLabel(loan.status)}</span>
                             </div>
+                            ${loan.status === 'pending' ? '<div class="notice section-gap"><strong>Application received.</strong> Approval review takes up to 48 hours.</div>' : ''}
                             <div class="action-row">
                                 <a class="btn btn-secondary btn-small" href="order.html?loan=${encodeURIComponent(loan.id)}">Open order</a>
                             </div>
@@ -173,6 +174,7 @@
             content.className = '';
             content.innerHTML = `
                 ${loan.temporaryPolicy ? '<div class="draft-banner"><strong>Temporary figures:</strong> the administrator must replace the test rate and legal wording with the client’s approved policy before launch.</div>' : ''}
+                ${loan.status === 'pending' ? '<div class="notice"><strong>Application received.</strong> Approval review takes up to 48 hours.</div>' : ''}
                 ${documentPanel}
                 ${acceptancePanel}
                 <article class="card">

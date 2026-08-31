@@ -6,6 +6,8 @@ WHAT NOW WORKS
 - Borrower enters a civil-service employee number.
 - NRC front, NRC back and recent payslip are mandatory.
 - The files go to a private Google Drive folder owned by the administrator.
+- The verified document upload automatically creates the borrower loan record.
+- Pending applications show that approval review takes up to 48 hours.
 - Firebase Storage is not used and no Firebase Storage billing account is required.
 - Admin sees an Open private documents button and can view/download all three files.
 - Admin must confirm the document/KYC review before the Approve button appears.
@@ -33,9 +35,10 @@ DO THESE STEPS IN THIS ORDER
 
 5. TEST WITH TWO ACCOUNTS
    Borrower account:
-   - Enter employee number.
+   - Complete every application field and accept the consent statement.
    - Upload NRC front, NRC back and recent payslip.
-   - Submit the application.
+   - Confirm that the application submits automatically after the upload.
+   - Confirm it appears on the borrower dashboard with the 48-hour review notice.
 
    Admin account:
    - Open private documents.
