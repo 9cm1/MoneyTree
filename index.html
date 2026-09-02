@@ -4,8 +4,15 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#0c3b2c" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Money Tree" />
     <title>Money Tree — Sign in</title>
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="icon" type="image/png" sizes="192x192" href="assets/icons/icon-192.png" />
+    <link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png" />
     <link rel="stylesheet" href="style.css" />
+    <script src="pwa.js" defer></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
@@ -13,7 +20,7 @@
 <body class="login-body">
     <main class="login-card">
         <div class="login-brand">
-            <div class="login-logo" aria-label="Money Tree logo placeholder">🌳</div>
+            <img class="login-logo" src="assets/money-tree-logo.jpg" alt="Money Tree logo" width="887" height="443" />
             <h1>Money Tree</h1>
             <p class="login-motto">Easy Money</p>
         </div>

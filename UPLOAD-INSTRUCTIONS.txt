@@ -1,0 +1,19 @@
+MONEY TREE LOGO AND INSTALL UPDATE
+==================================
+
+This folder contains 19 website files plus this instruction file.
+
+1. Open this extracted MoneyTree-logo-install-update folder.
+2. Select everything EXCEPT UPLOAD-INSTRUCTIONS.txt.
+3. Drag the selected items into the ROOT of the GitHub MoneyTree repository.
+4. Keep the assets folder as a folder; do not move its four images to the root.
+5. Commit directly to the main branch.
+
+The upload should contain these important new items:
+- assets folder
+- manifest.webmanifest
+- pwa.js
+- sw.js
+
+The HTML pages and style.css replace their existing versions.
+No Firebase rule update or Google Apps Script redeployment is required.
